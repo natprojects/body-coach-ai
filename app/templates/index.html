@@ -458,7 +458,7 @@ async function init() {
 
   // Onboarding check
   setLoading('Loading profile...');
-  const ob = await api('GET', '/api/training/onboarding/status');
+  const ob = await api('GET', '/api/onboarding/status');
 
   if (!ob.success) {
     // JWT likely expired — clear and re-auth once (no recursion)
@@ -887,12 +887,12 @@ async function obNext() {
   const data = collectObStep();
   S.obData[step] = data;
 
-  const r = await api('POST', '/api/training/onboarding/step', {step, data});
+  const r = await api('POST', '/api/onboarding/step', {step, data});
   if (!r.success) { /* swallow — continue anyway */ }
 
   if (S.obIndex === S.obSteps.length - 1) {
     // Complete onboarding
-    await api('POST', '/api/training/onboarding/complete');
+    await api('POST', '/api/onboarding/complete');
     haptic('heavy');
     await loadMain();
     return;
