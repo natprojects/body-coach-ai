@@ -10,6 +10,8 @@ def create_app(config_class=Config):
     db.init_app(app)
     migrate.init_app(app, db)
 
+    from .core import models  # noqa: F401 — ensure models are registered with SQLAlchemy
+
     from .core.routes import bp as core_bp
     app.register_blueprint(core_bp, url_prefix='/api')
 
