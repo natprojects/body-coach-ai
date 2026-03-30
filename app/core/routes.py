@@ -1,9 +1,10 @@
 from datetime import date
 from flask import Blueprint, g, jsonify, request, current_app
+from werkzeug.security import generate_password_hash, check_password_hash
 from app.core.auth import (
     create_jwt, get_or_create_user, require_auth, validate_telegram_init_data
 )
-from app.core.models import BodyMeasurement, DailyCheckin, PainJournal
+from app.core.models import User, BodyMeasurement, DailyCheckin, PainJournal
 from app.extensions import db
 
 bp = Blueprint('core', __name__)
@@ -34,6 +35,41 @@ def auth_validate():
         'token': token,
         'user_id': user.id,
         'onboarding_completed': user.onboarding_completed_at is not None,
+    }})
+
+
+@bp.route('/auth/register', methods=['POST'])
+@require_auth
+def auth_register():
+    body = request.json or {}
+    username = (body.get('username') or '').strip().lower()
+    password = body.get('password', '')
+    if not username or len(username) < 3:
+        return jsonify({'success': False, 'error': {'code': 'BAD_REQUEST', 'message': 'Username must be at least 3 characters'}}), 400
+    if len(password) < 6:
+        return jsonify({'success': False, 'error': {'code': 'BAD_REQUEST', 'message': 'Password must be at least 6 characters'}}), 400
+    if User.query.filter_by(username=username).first():
+        return jsonify({'success': False, 'error': {'code': 'CONFLICT', 'message': 'Username already taken'}}), 409
+    user = db.session.get(User, g.user_id)
+    user.username = username
+    user.password_hash = generate_password_hash(password)
+    db.session.commit()
+    return jsonify({'success': True, 'data': {'username': username}})
+
+
+@bp.route('/auth/login', methods=['POST'])
+def auth_login():
+    body = request.json or {}
+    username = (body.get('username') or '').strip().lower()
+    password = body.get('password', '')
+    user = User.query.filter_by(username=username).first()
+    if not user or not user.password_hash or not check_password_hash(user.password_hash, password):
+        return jsonify({'success': False, 'error': {'code': 'UNAUTHORIZED', 'message': 'Invalid username or password'}}), 401
+    token = create_jwt(user.id, current_app.config['SECRET_KEY'])
+    return jsonify({'success': True, 'data': {
+        'token': token,
+        'user_id': user.id,
+        'name': user.name,
     }})
 
 

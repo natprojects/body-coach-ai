@@ -225,6 +225,36 @@
   <button id="btn-retry" class="btn btn-primary" style="max-width:200px" onclick="retryInit()">RETRY</button>
 </div>
 
+<!-- LOGIN -->
+<div id="screen-login" class="screen">
+  <div style="flex:1;display:flex;flex-direction:column;justify-content:center;padding:32px 24px;gap:20px">
+    <div>
+      <div style="font-family:'Barlow Condensed',sans-serif;font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:var(--accent);margin-bottom:8px">Body Coach AI</div>
+      <div style="font-family:'Barlow Condensed',sans-serif;font-size:32px;font-weight:800;text-transform:uppercase;line-height:1">Welcome<br>Back</div>
+    </div>
+    <div class="field"><label>Username</label><input type="text" id="login-username" placeholder="your_username" autocomplete="username" autocapitalize="none"></div>
+    <div class="field"><label>Password</label><input type="password" id="login-password" placeholder="••••••" autocomplete="current-password"></div>
+    <div id="login-msg"></div>
+    <button class="btn btn-primary" onclick="submitLogin()">LOG IN</button>
+  </div>
+</div>
+
+<!-- ACCOUNT CREATION (after onboarding) -->
+<div id="screen-account" class="screen">
+  <div style="flex:1;display:flex;flex-direction:column;justify-content:center;padding:32px 24px;gap:20px">
+    <div>
+      <div style="font-family:'Barlow Condensed',sans-serif;font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:var(--accent);margin-bottom:8px">Almost done</div>
+      <div style="font-family:'Barlow Condensed',sans-serif;font-size:32px;font-weight:800;text-transform:uppercase;line-height:1">Create<br>Account</div>
+      <div style="font-size:13px;color:var(--muted);margin-top:10px">So you can log in from any device without redoing the setup.</div>
+    </div>
+    <div class="field"><label>Username</label><input type="text" id="reg-username" placeholder="your_username" autocapitalize="none"></div>
+    <div class="field"><label>Password</label><input type="password" id="reg-password" placeholder="min 6 characters"></div>
+    <div id="reg-msg"></div>
+    <button class="btn btn-primary" onclick="submitRegister()">CREATE ACCOUNT</button>
+    <button class="btn btn-ghost" onclick="skipRegister()">SKIP FOR NOW</button>
+  </div>
+</div>
+
 <!-- ONBOARDING -->
 <div id="screen-onboarding" class="screen">
   <div class="ob-header">
@@ -442,7 +472,8 @@ async function init() {
     setLoading('Authenticating...');
     const res = await api('POST', '/api/auth/validate', {init_data: initData});
     if (!res.success) {
-      showError('Authentication failed.\n' + (res.error?.message || 'Open the app via your Telegram bot.'));
+      // Telegram auth failed — show login screen as fallback
+      showScreen('login');
       return;
     }
     S.jwt = res.data.token;
@@ -484,6 +515,57 @@ async function init() {
   }
 
   await loadMain();
+}
+
+// ── LOGIN ──
+
+async function submitLogin() {
+  const username = document.getElementById('login-username').value.trim();
+  const password = document.getElementById('login-password').value;
+  const msg = document.getElementById('login-msg');
+  if (!username || !password) { msg.innerHTML = '<div class="error-msg">Fill in all fields</div>'; return; }
+  msg.innerHTML = '<div style="color:var(--muted);font-size:13px">Logging in...</div>';
+  const r = await api('POST', '/api/auth/login', {username, password});
+  if (!r.success) { msg.innerHTML = '<div class="error-msg">'+(r.error?.message||'Login failed')+'</div>'; return; }
+  S.jwt = r.data.token;
+  localStorage.setItem('bca_jwt', S.jwt);
+  const nameEl = document.getElementById('user-name');
+  if (nameEl && r.data.name) nameEl.textContent = r.data.name.toUpperCase();
+  msg.innerHTML = '';
+  showScreen('loading');
+  setLoading('Loading...');
+  await loadAfterAuth();
+}
+
+async function loadAfterAuth() {
+  const ob = await api('GET', '/api/onboarding/status');
+  if (!ob.success) { showError('Server error: ' + (ob.error?.message || 'Unknown')); return; }
+  if (!ob.data.completed) {
+    S.obSteps = ob.data.steps;
+    S.obIndex = 0;
+    renderObStep();
+    showScreen('onboarding');
+    return;
+  }
+  await loadMain();
+}
+
+// ── REGISTER ──
+async function submitRegister() {
+  const username = document.getElementById('reg-username').value.trim();
+  const password = document.getElementById('reg-password').value;
+  const msg = document.getElementById('reg-msg');
+  if (!username || !password) { msg.innerHTML = '<div class="error-msg">Fill in all fields</div>'; return; }
+  msg.innerHTML = '<div style="color:var(--muted);font-size:13px">Saving...</div>';
+  const r = await api('POST', '/api/auth/register', {username, password});
+  if (!r.success) { msg.innerHTML = '<div class="error-msg">'+(r.error?.message||'Error')+'</div>'; return; }
+  haptic('heavy');
+  await loadMain();
+}
+
+function skipRegister() {
+  haptic();
+  loadMain();
 }
 
 function setLoading(msg) {
@@ -894,7 +976,9 @@ async function obNext() {
     // Complete onboarding
     await api('POST', '/api/onboarding/complete');
     haptic('heavy');
-    await loadMain();
+    // Show account creation unless they already have a username
+    const userCheck = await api('GET', '/api/onboarding/status');
+    showScreen('account');
     return;
   }
 
