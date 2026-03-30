@@ -40,12 +40,14 @@
       font-weight: 700; letter-spacing: .1em; text-transform: uppercase; margin-bottom: 20px; }
 
     /* ── LOADING ── */
-    #screen-loading { align-items: center; justify-content: center; gap: 16px; }
+    #screen-loading { align-items: center; justify-content: center; gap: 16px; padding: 40px; }
     .spinner { width: 36px; height: 36px; border: 2px solid var(--border);
       border-top-color: var(--accent); border-radius: 50%; animation: spin .8s linear infinite; }
     @keyframes spin { to { transform: rotate(360deg); } }
     .loading-label { font-family: 'Barlow Condensed', sans-serif; font-size: 13px;
-      letter-spacing: .15em; text-transform: uppercase; color: var(--muted); }
+      letter-spacing: .15em; text-transform: uppercase; color: var(--muted); text-align: center; }
+    .loading-error { color: #ff5555; font-size: 13px; text-align: center; line-height: 1.5; }
+    #btn-retry { display: none; }
 
     /* ── ONBOARDING ── */
     #screen-onboarding { padding-top: calc(env(safe-area-inset-top,0) + 12px); }
@@ -217,8 +219,10 @@
 
 <!-- LOADING -->
 <div id="screen-loading" class="screen active">
-  <div class="spinner"></div>
+  <div class="spinner" id="loading-spinner"></div>
   <div class="loading-label" id="loading-label">Initializing...</div>
+  <div class="loading-error" id="loading-error" style="display:none"></div>
+  <button id="btn-retry" class="btn btn-primary" style="max-width:200px" onclick="retryInit()">RETRY</button>
 </div>
 
 <!-- ONBOARDING -->
@@ -386,6 +390,8 @@ function overlayBgClick(e, id) { if (e.target.id === id) closeOverlay(id); }
 // ── API ──
 async function api(method, path, body) {
   try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 12000);
     const r = await fetch(path, {
       method,
       headers: {
@@ -393,34 +399,57 @@ async function api(method, path, body) {
         ...(S.jwt ? {'Authorization': 'Bearer '+S.jwt} : {}),
       },
       body: body ? JSON.stringify(body) : undefined,
+      signal: controller.signal,
     });
-    return r.json();
-  } catch(e) { return {success:false, error:{message: e.message}}; }
+    clearTimeout(timer);
+    const text = await r.text();
+    try { return JSON.parse(text); }
+    catch(e) { return {success:false, error:{message:'Server error ('+r.status+')'}}; }
+  } catch(e) {
+    return {success:false, error:{message: e.name==='AbortError' ? 'Request timed out' : e.message}};
+  }
 }
 function haptic(type='light') { tg?.HapticFeedback?.impactOccurred(type); }
 
 // ── INIT ──
+function retryInit() {
+  document.getElementById('loading-error').style.display = 'none';
+  document.getElementById('btn-retry').style.display = 'none';
+  document.getElementById('loading-spinner').style.display = '';
+  document.getElementById('loading-label').style.display = '';
+  init();
+}
+
+function showError(msg) {
+  document.getElementById('loading-spinner').style.display = 'none';
+  document.getElementById('loading-label').style.display = 'none';
+  document.getElementById('loading-error').textContent = msg;
+  document.getElementById('loading-error').style.display = 'block';
+  document.getElementById('btn-retry').style.display = 'block';
+}
+
 async function init() {
   // Set date
   const now = new Date();
-  const el = document.getElementById('today-date');
-  if (el) el.textContent = now.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'}).toUpperCase();
+  const dateEl = document.getElementById('today-date');
+  if (dateEl) dateEl.textContent = now.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'}).toUpperCase();
 
   setLoading('Connecting...');
 
-  // Auth
+  // Auth — try stored JWT first, re-auth once if it fails
   if (!S.jwt) {
     const initData = tg?.initData || '';
+    setLoading('Authenticating...');
     const res = await api('POST', '/api/auth/validate', {init_data: initData});
     if (!res.success) {
-      setLoading('Auth failed. Open via Telegram.');
+      showError('Authentication failed.\n' + (res.error?.message || 'Open the app via your Telegram bot.'));
       return;
     }
     S.jwt = res.data.token;
     localStorage.setItem('bca_jwt', S.jwt);
   }
 
-  // Set user name
+  // Set user name from Telegram
   const tgUser = tg?.initDataUnsafe?.user;
   if (tgUser?.first_name) {
     const el = document.getElementById('user-name');
@@ -430,7 +459,21 @@ async function init() {
   // Onboarding check
   setLoading('Loading profile...');
   const ob = await api('GET', '/api/training/onboarding/status');
-  if (!ob.success) { S.jwt = null; localStorage.removeItem('bca_jwt'); init(); return; }
+
+  if (!ob.success) {
+    // JWT likely expired — clear and re-auth once (no recursion)
+    if (!S._reauthed) {
+      S.jwt = null;
+      S._reauthed = true;
+      localStorage.removeItem('bca_jwt');
+      await init();
+      S._reauthed = false;
+    } else {
+      showError('Server error: ' + (ob.error?.message || 'Could not load profile.'));
+    }
+    return;
+  }
+  S._reauthed = false;
 
   if (!ob.data.completed) {
     S.obSteps = ob.data.steps;
