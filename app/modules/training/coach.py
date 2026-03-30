@@ -164,4 +164,7 @@ Structure:
 Ensure all exercises respect the user's injuries and mobility restrictions."""
 
     result = complete(system_prompt, user_prompt, max_tokens=8192)
-    return json.loads(result)
+    try:
+        return json.loads(result)
+    except json.JSONDecodeError as e:
+        raise ValueError(f"AI returned invalid JSON for program generation: {e}") from e

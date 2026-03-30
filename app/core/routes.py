@@ -11,7 +11,8 @@ bp = Blueprint('core', __name__)
 
 @bp.route('/auth/validate', methods=['POST'])
 def auth_validate():
-    init_data = request.json.get('init_data', '')
+    body = request.json or {}
+    init_data = body.get('init_data', '')
     try:
         parsed = validate_telegram_init_data(init_data, current_app.config['TELEGRAM_BOT_TOKEN'])
     except ValueError:

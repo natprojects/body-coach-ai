@@ -66,7 +66,12 @@ def program_generate():
         return jsonify({'success': False, 'error': {
             'code': 'BAD_REQUEST', 'message': 'Complete onboarding first'
         }}), 400
-    program_dict = generate_program(user)
+    try:
+        program_dict = generate_program(user)
+    except ValueError as e:
+        return jsonify({'success': False, 'error': {
+            'code': 'AI_ERROR', 'message': 'Failed to generate program. Please try again.'
+        }}), 500
     program = save_program_from_dict(user.id, program_dict)
     return jsonify({'success': True, 'data': {
         'program_id': program.id,
@@ -205,6 +210,11 @@ def session_log_set():
     data = request.json or {}
     session_id = data.get('session_id')
     exercise_id = data.get('exercise_id')
+
+    # Verify session belongs to authenticated user
+    session = WorkoutSession.query.filter_by(id=session_id, user_id=g.user_id).first()
+    if not session:
+        return jsonify({'success': False, 'error': {'code': 'NOT_FOUND', 'message': 'Session not found'}}), 404
 
     le = LoggedExercise.query.filter_by(session_id=session_id, exercise_id=exercise_id).first()
     if not le:

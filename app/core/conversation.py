@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from app.extensions import db
 from app.core.models import AIConversation
 
