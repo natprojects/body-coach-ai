@@ -11,11 +11,11 @@ jobs:
       - name: Deploy to server
         uses: appleboy/ssh-action@v1.0.0
         with:
-          host: gym-coach.111miniapp.com
-          username: root
+          host: ${{ secrets.HETZNER_HOST }}
+          port: ${{ secrets.HETZNER_PORT }}
+          username: ${{ secrets.HETZNER_USER }}
           password: ${{ secrets.HETZNER_PASS }}
           script: |
-            cd /root/body-coach-ai
+            cd /srv/gym-coach
             git pull origin main
             docker compose up -d --build
-            docker compose exec -T app flask db upgrade
