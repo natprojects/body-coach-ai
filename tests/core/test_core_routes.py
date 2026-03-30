@@ -1,0 +1,84 @@
+import json
+import hashlib
+import hmac
+import urllib.parse
+from datetime import date
+from app.core.models import User, DailyCheckin, PainJournal, BodyMeasurement
+from app.core.auth import create_jwt
+
+
+def _auth_header(app, user_id):
+    token = create_jwt(user_id, app.config['SECRET_KEY'])
+    return {'Authorization': f'Bearer {token}'}
+
+
+def _make_init_data(bot_token, telegram_id=123456):
+    user_json = json.dumps({"id": telegram_id, "first_name": "Natalie"})
+    params = {"user": user_json, "auth_date": "1700000000"}
+    data_check_string = '\n'.join(f"{k}={v}" for k, v in sorted(params.items()))
+    secret_key = hmac.new(b'WebAppData', bot_token.encode(), hashlib.sha256).digest()
+    params['hash'] = hmac.new(secret_key, data_check_string.encode(), hashlib.sha256).hexdigest()
+    return urllib.parse.urlencode(params)
+
+
+def test_auth_validate_creates_user(client, app, db):
+    init_data = _make_init_data(app.config['TELEGRAM_BOT_TOKEN'])
+    resp = client.post('/api/auth/validate', json={'init_data': init_data})
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert data['success'] is True
+    assert 'token' in data['data']
+    assert User.query.filter_by(telegram_id=123456).first() is not None
+
+
+def test_auth_validate_invalid(client):
+    resp = client.post('/api/auth/validate', json={'init_data': 'bad=data&hash=wrong'})
+    assert resp.status_code == 401
+
+
+def test_create_checkin(client, app, db):
+    user = User(telegram_id=30001)
+    db.session.add(user)
+    db.session.commit()
+    resp = client.post('/api/checkin', json={
+        'energy_level': 7, 'sleep_quality': 6, 'stress_level': 4,
+        'motivation': 8, 'soreness_level': 3
+    }, headers=_auth_header(app, user.id))
+    assert resp.status_code == 200
+    assert DailyCheckin.query.filter_by(user_id=user.id).count() == 1
+
+
+def test_get_checkin_today(client, app, db):
+    user = User(telegram_id=30002)
+    db.session.add(user)
+    db.session.commit()
+    checkin = DailyCheckin(user_id=user.id, date=date.today(), energy_level=9, sleep_quality=8,
+                           stress_level=2, motivation=10, soreness_level=1)
+    db.session.add(checkin)
+    db.session.commit()
+    resp = client.get('/api/checkin/today', headers=_auth_header(app, user.id))
+    assert resp.status_code == 200
+    assert resp.get_json()['data']['energy_level'] == 9
+
+
+def test_create_pain_entry(client, app, db):
+    user = User(telegram_id=30003)
+    db.session.add(user)
+    db.session.commit()
+    resp = client.post('/api/pain', json={
+        'body_part': 'left knee', 'pain_type': 'sharp',
+        'intensity': 6, 'when_occurs': 'during'
+    }, headers=_auth_header(app, user.id))
+    assert resp.status_code == 200
+    assert PainJournal.query.filter_by(user_id=user.id).count() == 1
+
+
+def test_create_measurement(client, app, db):
+    user = User(telegram_id=30004)
+    db.session.add(user)
+    db.session.commit()
+    resp = client.post('/api/measurements', json={
+        'weight_kg': 62.5, 'waist_cm': 72.0, 'hips_cm': 95.0
+    }, headers=_auth_header(app, user.id))
+    assert resp.status_code == 200
+    assert BodyMeasurement.query.filter_by(user_id=user.id).count() == 1
