@@ -1,6 +1,7 @@
 from datetime import datetime, date, timedelta
-from flask import g, jsonify, request
+from flask import g, jsonify, request, Response, stream_with_context
 from app.core.auth import require_auth
+from app.core.ai import stream_chat
 from app.core.models import User
 from app.extensions import db
 from . import bp
@@ -297,3 +298,25 @@ def progress_history():
         'id': s.id, 'date': s.date.isoformat(),
         'status': s.status, 'workout_id': s.workout_id,
     } for s in sessions]})
+
+
+# ── AI Chat ───────────────────────────────────────────────────────────────────
+
+@bp.route('/training/chat', methods=['POST'])
+@require_auth
+def training_chat():
+    data = request.json or {}
+    message = data.get('message', '')
+    session_id = data.get('session_id')  # optional
+
+    extra_context = build_training_context(g.user_id, session_id=session_id)
+
+    # Collect all chunks eagerly so both messages are persisted before streaming
+    chunks = list(stream_chat(g.user_id, 'training', message, extra_context=extra_context))
+
+    def generate():
+        for chunk in chunks:
+            yield f"data: {chunk}\n\n"
+        yield "data: [DONE]\n\n"
+
+    return Response(stream_with_context(generate()), mimetype='text/event-stream')
