@@ -10,445 +10,897 @@
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
     :root {
-      --bg: #080808;
-      --accent: #0055FF;
-      --accent-dim: rgba(0, 85, 255, 0.20);
-      --accent-glow: rgba(0, 85, 255, 0.35);
-      --text: #FFFFFF;
-      --text-muted: #666;
-      --card-bg: #0e0e0e;
-      --border: rgba(255,255,255,0.06);
+      --bg: #080808; --accent: #0055FF; --accent-dim: rgba(0,85,255,0.18);
+      --accent-glow: rgba(0,85,255,0.35); --text: #fff; --muted: #555;
+      --card: #0e0e0e; --border: rgba(255,255,255,0.06);
     }
+    html, body { height: 100%; background: var(--bg); color: var(--text);
+      font-family: 'DM Sans', sans-serif; overflow: hidden;
+      -webkit-tap-highlight-color: transparent; user-select: none; }
 
-    html, body {
-      height: 100%;
-      background: var(--bg);
-      color: var(--text);
-      font-family: 'DM Sans', sans-serif;
-      overflow: hidden;
-      -webkit-tap-highlight-color: transparent;
-      user-select: none;
-    }
+    /* ── SCREENS ── */
+    .screen { position: fixed; inset: 0; display: flex; flex-direction: column;
+      padding: env(safe-area-inset-top,0) 0 env(safe-area-inset-bottom,0);
+      opacity: 0; pointer-events: none; transition: opacity .2s ease; }
+    .screen.active { opacity: 1; pointer-events: auto; }
 
-    /* ── LAYOUT ── */
-    #app {
-      display: flex;
-      flex-direction: column;
-      height: 100%;
-      height: 100dvh;
-      padding: env(safe-area-inset-top) 0 env(safe-area-inset-bottom);
-    }
+    /* ── OVERLAYS ── */
+    .overlay { position: fixed; inset: 0; background: rgba(0,0,0,.7);
+      display: flex; align-items: flex-end; opacity: 0; pointer-events: none;
+      transition: opacity .25s ease; z-index: 100; }
+    .overlay.open { opacity: 1; pointer-events: auto; }
+    .overlay-sheet { width: 100%; background: #111; border-radius: 14px 14px 0 0;
+      padding: 16px 20px 32px; transform: translateY(30px);
+      transition: transform .25s ease; max-height: 90dvh; overflow-y: auto; }
+    .overlay.open .overlay-sheet { transform: translateY(0); }
+    .overlay-handle { width: 36px; height: 3px; background: #333;
+      border-radius: 2px; margin: 0 auto 20px; }
+    .overlay-title { font-family: 'Barlow Condensed', sans-serif; font-size: 20px;
+      font-weight: 700; letter-spacing: .1em; text-transform: uppercase; margin-bottom: 20px; }
 
-    /* ── STATUS BAR ── */
-    .status-bar {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 14px 20px 10px;
-      flex-shrink: 0;
-    }
-    .status-bar .user-name {
-      font-family: 'Barlow Condensed', sans-serif;
-      font-weight: 700;
-      font-size: 15px;
-      letter-spacing: 0.08em;
-      text-transform: uppercase;
-      color: var(--text);
-    }
-    .status-bar .today-date {
-      font-size: 12px;
-      color: var(--text-muted);
-      letter-spacing: 0.05em;
-    }
+    /* ── LOADING ── */
+    #screen-loading { align-items: center; justify-content: center; gap: 16px; }
+    .spinner { width: 36px; height: 36px; border: 2px solid var(--border);
+      border-top-color: var(--accent); border-radius: 50%; animation: spin .8s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .loading-label { font-family: 'Barlow Condensed', sans-serif; font-size: 13px;
+      letter-spacing: .15em; text-transform: uppercase; color: var(--muted); }
 
-    /* ── CONTENT AREA ── */
-    .content {
-      flex: 1;
-      overflow: hidden;
-      position: relative;
-    }
-    .tab-panel {
-      position: absolute;
-      inset: 0;
-      padding: 8px 16px 12px;
-      display: flex;
-      flex-direction: column;
-      gap: 12px;
-      opacity: 0;
-      pointer-events: none;
-      transition: opacity 0.22s ease;
-    }
-    .tab-panel.active {
-      opacity: 1;
-      pointer-events: auto;
-    }
+    /* ── ONBOARDING ── */
+    #screen-onboarding { padding-top: calc(env(safe-area-inset-top,0) + 12px); }
+    .ob-header { padding: 0 20px 16px; flex-shrink: 0; }
+    .ob-progress { display: flex; gap: 4px; margin-bottom: 16px; }
+    .ob-dot { flex: 1; height: 2px; background: var(--border); border-radius: 1px; transition: background .3s; }
+    .ob-dot.done { background: var(--accent); }
+    .ob-dot.active { background: var(--accent); box-shadow: 0 0 6px var(--accent); }
+    .ob-step-label { font-size: 11px; color: var(--muted); letter-spacing: .1em; text-transform: uppercase; }
+    .ob-title { font-family: 'Barlow Condensed', sans-serif; font-size: 28px;
+      font-weight: 800; text-transform: uppercase; margin-top: 4px; }
+    .ob-body { flex: 1; overflow-y: auto; padding: 0 20px; }
+    .ob-footer { padding: 14px 20px; flex-shrink: 0; display: flex; gap: 10px; }
 
-    /* ── COMING SOON ── */
-    .coming-soon {
-      flex: 1;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      gap: 16px;
-    }
-    .coming-soon-line {
-      width: 40px;
-      height: 2px;
-      background: var(--accent);
-      box-shadow: 0 0 10px var(--accent);
-    }
-    .coming-soon-text {
-      font-family: 'Barlow Condensed', sans-serif;
-      font-weight: 700;
-      font-size: 22px;
-      letter-spacing: 0.12em;
-      text-transform: uppercase;
-      color: var(--text-muted);
-    }
+    /* ── FORMS ── */
+    .field { margin-bottom: 16px; }
+    .field label { display: block; font-size: 11px; color: var(--muted);
+      letter-spacing: .1em; text-transform: uppercase; margin-bottom: 6px; }
+    .field input[type=text], .field input[type=number], .field input[type=date],
+    .field textarea, .field select {
+      width: 100%; background: var(--card); border: 1px solid var(--border);
+      border-radius: 4px; color: var(--text); font-family: 'DM Sans', sans-serif;
+      font-size: 15px; padding: 12px 14px; outline: none; transition: border-color .2s; }
+    .field input:focus, .field textarea:focus, .field select:focus {
+      border-color: var(--accent); }
+    .field textarea { resize: none; height: 80px; }
+    .radio-group, .check-group { display: flex; flex-direction: column; gap: 8px; }
+    .radio-opt, .check-opt { display: flex; align-items: center; gap: 10px;
+      background: var(--card); border: 1px solid var(--border); border-radius: 4px;
+      padding: 11px 14px; cursor: pointer; transition: border-color .2s, background .2s; }
+    .radio-opt.sel, .check-opt.sel { border-color: var(--accent); background: var(--accent-dim); }
+    .radio-opt span, .check-opt span { font-size: 14px; text-transform: capitalize; }
+    .scale-row { display: flex; gap: 6px; }
+    .scale-btn { flex: 1; padding: 10px 0; background: var(--card); border: 1px solid var(--border);
+      border-radius: 3px; color: var(--muted); font-family: 'Barlow Condensed', sans-serif;
+      font-size: 14px; font-weight: 700; cursor: pointer; transition: all .15s; }
+    .scale-btn.sel { background: var(--accent); border-color: var(--accent); color: #fff; }
+    .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+    /* ── BUTTONS ── */
+    .btn { width: 100%; padding: 14px; border: none; border-radius: 3px; cursor: pointer;
+      font-family: 'Barlow Condensed', sans-serif; font-size: 16px; font-weight: 700;
+      letter-spacing: .14em; text-transform: uppercase; transition: all .15s; }
+    .btn-primary { background: var(--accent); color: #fff; }
+    .btn-primary:active { box-shadow: 0 0 24px var(--accent-glow); }
+    .btn-ghost { background: transparent; border: 1px solid var(--border); color: var(--muted); }
+    .btn-ghost:active { border-color: var(--accent); color: var(--accent); }
+    .btn-danger { background: #1a0000; border: 1px solid #440000; color: #ff4444; }
+
+    /* ── MAIN SCREEN ── */
+    .status-bar { display: flex; justify-content: space-between; align-items: center;
+      padding: 14px 20px 10px; flex-shrink: 0; }
+    .status-bar .user-name { font-family: 'Barlow Condensed', sans-serif; font-weight: 700;
+      font-size: 15px; letter-spacing: .08em; text-transform: uppercase; }
+    .status-bar .today-date { font-size: 12px; color: var(--muted); letter-spacing: .05em; }
+    .content { flex: 1; overflow: hidden; position: relative; }
+    .tab-panel { position: absolute; inset: 0; padding: 8px 16px 12px;
+      display: flex; flex-direction: column; gap: 12px; opacity: 0;
+      pointer-events: none; transition: opacity .22s ease; overflow-y: auto; }
+    .tab-panel.active { opacity: 1; pointer-events: auto; }
+    .coming-soon { flex: 1; display: flex; flex-direction: column;
+      align-items: center; justify-content: center; gap: 16px; }
+    .cs-line { width: 40px; height: 2px; background: var(--accent); box-shadow: 0 0 10px var(--accent); }
+    .cs-text { font-family: 'Barlow Condensed', sans-serif; font-weight: 700;
+      font-size: 22px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
 
     /* ── HERO CARD ── */
-    .hero-card {
-      position: relative;
-      background: var(--card-bg);
-      border: 1px solid var(--border);
-      border-radius: 4px;
-      padding: 24px 22px 20px;
-      overflow: hidden;
-      flex-shrink: 0;
-      transition: box-shadow 0.2s;
-    }
-    .hero-card:active {
-      box-shadow: 0 0 28px var(--accent-glow);
-    }
-
-    /* diagonal blue slash */
-    .hero-card::before {
-      content: '';
-      position: absolute;
-      top: 0; right: 0;
-      width: 100%; height: 100%;
-      background: linear-gradient(
-        118deg,
-        transparent 0%,
-        transparent 56%,
-        rgba(0, 85, 255, 0.08) 56%,
-        rgba(0, 85, 255, 0.08) 58%,
-        transparent 58%
-      );
-      pointer-events: none;
-    }
-    /* blue accent top-left corner bar */
-    .hero-card::after {
-      content: '';
-      position: absolute;
-      top: 0; left: 0;
-      width: 3px; height: 60%;
-      background: var(--accent);
-      box-shadow: 0 0 12px var(--accent);
-    }
-
-    .hero-label {
-      font-family: 'Barlow Condensed', sans-serif;
-      font-size: 11px;
-      font-weight: 600;
-      letter-spacing: 0.18em;
-      text-transform: uppercase;
-      color: var(--accent);
-      margin-bottom: 8px;
-    }
-    .hero-title {
-      font-family: 'Barlow Condensed', sans-serif;
-      font-size: 34px;
-      font-weight: 800;
-      line-height: 1.0;
-      letter-spacing: 0.02em;
-      text-transform: uppercase;
-      margin-bottom: 20px;
-    }
-    .hero-stats {
-      display: flex;
-      gap: 0;
-      margin-bottom: 22px;
-    }
-    .stat {
-      flex: 1;
-      display: flex;
-      flex-direction: column;
-      gap: 3px;
-      padding-right: 16px;
-      border-right: 1px solid var(--border);
-    }
-    .stat:last-child {
-      border-right: none;
-      padding-right: 0;
-      padding-left: 16px;
-    }
-    .stat:not(:first-child):not(:last-child) {
-      padding-left: 16px;
-    }
-    .stat-value {
-      font-family: 'Barlow Condensed', sans-serif;
-      font-size: 26px;
-      font-weight: 700;
-      color: var(--text);
-      line-height: 1;
-    }
-    .stat-label {
-      font-size: 10px;
-      color: var(--text-muted);
-      letter-spacing: 0.08em;
-      text-transform: uppercase;
-    }
-
-    .btn-start {
-      width: 100%;
-      padding: 14px;
-      background: var(--accent);
-      border: none;
-      border-radius: 3px;
-      color: #fff;
-      font-family: 'Barlow Condensed', sans-serif;
-      font-size: 16px;
-      font-weight: 700;
-      letter-spacing: 0.14em;
-      text-transform: uppercase;
-      cursor: pointer;
-      position: relative;
-      overflow: hidden;
-      transition: box-shadow 0.2s;
-    }
-    .btn-start::after {
-      content: '';
-      position: absolute;
-      inset: 0;
-      background: rgba(255,255,255,0.08);
-      opacity: 0;
-      transition: opacity 0.15s;
-    }
-    .btn-start:active::after { opacity: 1; }
-    .btn-start:active {
-      box-shadow: 0 0 24px var(--accent-glow), 0 0 48px var(--accent-glow);
-    }
-
-    /* ── QUICK ACTION CARDS ── */
-    .quick-cards {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 10px;
-      flex-shrink: 0;
-    }
-    .quick-card {
-      background: var(--accent-dim);
-      border: 1px solid rgba(0, 85, 255, 0.25);
-      border-radius: 4px;
-      padding: 16px 14px;
-      cursor: pointer;
-      position: relative;
-      overflow: hidden;
-      transition: box-shadow 0.2s;
-    }
-    .quick-card::before {
-      content: '';
-      position: absolute;
-      bottom: 0; right: 0;
-      width: 40%;
-      height: 2px;
-      background: var(--accent);
-      opacity: 0.5;
-    }
-    .quick-card:active {
-      box-shadow: 0 0 18px var(--accent-glow);
-    }
-    .quick-card-label {
-      font-size: 10px;
-      color: var(--accent);
-      letter-spacing: 0.14em;
-      text-transform: uppercase;
-      margin-bottom: 6px;
-    }
-    .quick-card-title {
-      font-family: 'Barlow Condensed', sans-serif;
-      font-size: 18px;
-      font-weight: 700;
-      letter-spacing: 0.04em;
-      text-transform: uppercase;
-      line-height: 1.1;
-    }
+    .hero-card { position: relative; background: var(--card); border: 1px solid var(--border);
+      border-radius: 4px; padding: 24px 22px 20px; overflow: hidden; flex-shrink: 0; }
+    .hero-card::before { content: ''; position: absolute; top: 0; right: 0;
+      width: 100%; height: 100%; pointer-events: none;
+      background: linear-gradient(118deg,transparent 0%,transparent 56%,
+        rgba(0,85,255,.08) 56%,rgba(0,85,255,.08) 58%,transparent 58%); }
+    .hero-card::after { content: ''; position: absolute; top: 0; left: 0;
+      width: 3px; height: 60%; background: var(--accent); box-shadow: 0 0 12px var(--accent); }
+    .hero-label { font-family: 'Barlow Condensed', sans-serif; font-size: 11px;
+      font-weight: 600; letter-spacing: .18em; text-transform: uppercase;
+      color: var(--accent); margin-bottom: 8px; }
+    .hero-title { font-family: 'Barlow Condensed', sans-serif; font-size: 34px;
+      font-weight: 800; line-height: 1; letter-spacing: .02em; text-transform: uppercase;
+      margin-bottom: 20px; }
+    .hero-stats { display: flex; margin-bottom: 22px; }
+    .stat { flex: 1; display: flex; flex-direction: column; gap: 3px;
+      padding-right: 16px; border-right: 1px solid var(--border); }
+    .stat:last-child { border-right: none; padding-right: 0; padding-left: 16px; }
+    .stat:not(:first-child):not(:last-child) { padding-left: 16px; }
+    .stat-value { font-family: 'Barlow Condensed', sans-serif; font-size: 26px;
+      font-weight: 700; line-height: 1; }
+    .stat-label { font-size: 10px; color: var(--muted); letter-spacing: .08em; text-transform: uppercase; }
+    .rest-card { background: var(--card); border: 1px solid var(--border);
+      border-radius: 4px; padding: 32px 22px; text-align: center; flex-shrink: 0; }
+    .rest-card .rest-title { font-family: 'Barlow Condensed', sans-serif; font-size: 30px;
+      font-weight: 800; text-transform: uppercase; color: var(--muted); }
+    .no-program-card { background: var(--accent-dim); border: 1px solid rgba(0,85,255,.3);
+      border-radius: 4px; padding: 24px 22px; flex-shrink: 0; }
+    .no-program-card .np-title { font-family: 'Barlow Condensed', sans-serif; font-size: 18px;
+      font-weight: 700; text-transform: uppercase; margin-bottom: 8px; }
+    .no-program-card .np-body { font-size: 13px; color: var(--muted); margin-bottom: 16px; }
+    .quick-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; flex-shrink: 0; }
+    .quick-card { background: var(--accent-dim); border: 1px solid rgba(0,85,255,.25);
+      border-radius: 4px; padding: 16px 14px; cursor: pointer; position: relative;
+      overflow: hidden; transition: box-shadow .2s; }
+    .quick-card::before { content: ''; position: absolute; bottom: 0; right: 0;
+      width: 40%; height: 2px; background: var(--accent); opacity: .5; }
+    .quick-card:active { box-shadow: 0 0 18px var(--accent-glow); }
+    .qc-label { font-size: 10px; color: var(--accent); letter-spacing: .14em;
+      text-transform: uppercase; margin-bottom: 6px; }
+    .qc-title { font-family: 'Barlow Condensed', sans-serif; font-size: 18px;
+      font-weight: 700; letter-spacing: .04em; text-transform: uppercase; line-height: 1.1; }
 
     /* ── BOTTOM NAV ── */
-    .bottom-nav {
-      display: flex;
-      border-top: 1px solid var(--border);
-      flex-shrink: 0;
-      padding-bottom: env(safe-area-inset-bottom, 0px);
-    }
-    .nav-tab {
-      flex: 1;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      padding: 12px 4px 10px;
-      cursor: pointer;
-      position: relative;
-      gap: 0;
-      background: none;
-      border: none;
-      transition: color 0.2s;
-    }
-    .nav-tab::before {
-      content: '';
-      position: absolute;
-      top: 0; left: 20%; right: 20%;
-      height: 2px;
-      background: var(--accent);
-      box-shadow: 0 0 8px var(--accent);
-      opacity: 0;
-      transition: opacity 0.2s;
-    }
+    .bottom-nav { display: flex; border-top: 1px solid var(--border); flex-shrink: 0; }
+    .nav-tab { flex: 1; display: flex; align-items: center; justify-content: center;
+      padding: 12px 4px 10px; cursor: pointer; position: relative;
+      background: none; border: none; transition: color .2s; }
+    .nav-tab::before { content: ''; position: absolute; top: 0; left: 20%; right: 20%;
+      height: 2px; background: var(--accent); box-shadow: 0 0 8px var(--accent);
+      opacity: 0; transition: opacity .2s; }
     .nav-tab.active::before { opacity: 1; }
-    .nav-tab-label {
-      font-family: 'Barlow Condensed', sans-serif;
-      font-size: 13px;
-      font-weight: 700;
-      letter-spacing: 0.12em;
-      text-transform: uppercase;
-      color: var(--text-muted);
-      transition: color 0.2s;
-    }
-    .nav-tab.active .nav-tab-label {
-      color: var(--accent);
-    }
+    .nav-tab-label { font-family: 'Barlow Condensed', sans-serif; font-size: 13px;
+      font-weight: 700; letter-spacing: .12em; text-transform: uppercase;
+      color: var(--muted); transition: color .2s; }
+    .nav-tab.active .nav-tab-label { color: var(--accent); }
+
+    /* ── SESSION SCREEN ── */
+    #screen-session { padding-top: env(safe-area-inset-top,0); }
+    .session-header { display: flex; align-items: center; gap: 12px;
+      padding: 14px 16px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+    .session-back { background: none; border: 1px solid var(--border); border-radius: 3px;
+      color: var(--muted); font-family: 'Barlow Condensed', sans-serif; font-size: 12px;
+      font-weight: 700; letter-spacing: .1em; text-transform: uppercase;
+      padding: 6px 12px; cursor: pointer; }
+    .session-back:active { border-color: var(--accent); color: var(--accent); }
+    .session-name { font-family: 'Barlow Condensed', sans-serif; font-size: 18px;
+      font-weight: 800; text-transform: uppercase; flex: 1; }
+    .session-timer { font-family: 'Barlow Condensed', sans-serif; font-size: 16px;
+      font-weight: 600; color: var(--accent); }
+    .session-exercises { flex: 1; overflow-y: auto; padding: 12px 16px; display: flex;
+      flex-direction: column; gap: 10px; }
+    .ex-card { background: var(--card); border: 1px solid var(--border); border-radius: 4px;
+      overflow: hidden; }
+    .ex-card-header { padding: 14px 16px 10px; }
+    .ex-name { font-family: 'Barlow Condensed', sans-serif; font-size: 18px;
+      font-weight: 700; text-transform: uppercase; }
+    .ex-plan { font-size: 12px; color: var(--muted); margin-top: 2px; }
+    .ex-sets { padding: 0 16px 10px; display: flex; flex-direction: column; gap: 6px; }
+    .set-row { display: flex; align-items: center; gap: 10px; padding: 8px 10px;
+      background: #141414; border-radius: 3px; font-size: 13px; }
+    .set-num { font-family: 'Barlow Condensed', sans-serif; font-weight: 700;
+      font-size: 14px; color: var(--muted); width: 20px; }
+    .set-data { flex: 1; color: var(--text); }
+    .set-done { color: var(--accent); font-size: 14px; }
+    .ex-log-btn { margin: 0 16px 14px; padding: 10px;
+      background: rgba(0,85,255,.15); border: 1px dashed rgba(0,85,255,.4);
+      border-radius: 3px; color: var(--accent); font-family: 'Barlow Condensed', sans-serif;
+      font-size: 14px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase;
+      cursor: pointer; width: calc(100% - 32px); transition: background .15s; }
+    .ex-log-btn:active { background: var(--accent-dim); }
+    .session-footer { padding: 12px 16px; flex-shrink: 0; }
+
+    /* ── MISC ── */
+    .divider { height: 1px; background: var(--border); margin: 8px 0; }
+    .error-msg { color: #ff4444; font-size: 13px; text-align: center; margin-top: 8px; }
+    .success-msg { color: #44ff88; font-size: 13px; text-align: center; margin-top: 8px; }
+    .feedback-text { font-size: 14px; line-height: 1.6; color: #ccc; white-space: pre-wrap; }
   </style>
 </head>
 <body>
-<div id="app">
 
-  <!-- STATUS BAR -->
+<!-- LOADING -->
+<div id="screen-loading" class="screen active">
+  <div class="spinner"></div>
+  <div class="loading-label" id="loading-label">Initializing...</div>
+</div>
+
+<!-- ONBOARDING -->
+<div id="screen-onboarding" class="screen">
+  <div class="ob-header">
+    <div class="ob-progress" id="ob-progress"></div>
+    <div class="ob-step-label" id="ob-step-label"></div>
+    <div class="ob-title" id="ob-title"></div>
+  </div>
+  <div class="ob-body" id="ob-body"></div>
+  <div class="ob-footer">
+    <button class="btn btn-ghost" id="ob-back" onclick="obBack()" style="display:none">BACK</button>
+    <button class="btn btn-primary" id="ob-next" onclick="obNext()">NEXT</button>
+  </div>
+</div>
+
+<!-- MAIN -->
+<div id="screen-main" class="screen">
   <div class="status-bar">
     <span class="user-name" id="user-name">ATHLETE</span>
     <span class="today-date" id="today-date"></span>
   </div>
-
-  <!-- CONTENT -->
   <div class="content">
-
-    <!-- TRAIN -->
     <div class="tab-panel active" id="panel-train">
-      <div class="hero-card">
-        <div class="hero-label">Today's Training</div>
-        <div class="hero-title" id="workout-name">UPPER BODY A</div>
-        <div class="hero-stats">
-          <div class="stat">
-            <span class="stat-value" id="stat-exercises">6</span>
-            <span class="stat-label">Exercises</span>
-          </div>
-          <div class="stat">
-            <span class="stat-value" id="stat-sets">18</span>
-            <span class="stat-label">Sets</span>
-          </div>
-          <div class="stat">
-            <span class="stat-value" id="stat-time">55</span>
-            <span class="stat-label">Est. min</span>
-          </div>
-        </div>
-        <button class="btn-start" onclick="startWorkout()">START WORKOUT</button>
-      </div>
-
+      <div id="train-content"><!-- dynamic --></div>
       <div class="quick-cards">
         <div class="quick-card" onclick="openCheckin()">
-          <div class="quick-card-label">Daily</div>
-          <div class="quick-card-title">Check-In</div>
+          <div class="qc-label">Daily</div>
+          <div class="qc-title">Check-In</div>
         </div>
         <div class="quick-card" onclick="openPainLog()">
-          <div class="quick-card-label">Body</div>
-          <div class="quick-card-title">Pain Log</div>
+          <div class="qc-label">Body</div>
+          <div class="qc-title">Pain Log</div>
         </div>
       </div>
     </div>
-
-    <!-- NUTRITION -->
     <div class="tab-panel" id="panel-nutrition">
-      <div class="coming-soon">
-        <div class="coming-soon-line"></div>
-        <div class="coming-soon-text">Nutrition</div>
-        <div class="coming-soon-line"></div>
-      </div>
+      <div class="coming-soon"><div class="cs-line"></div><div class="cs-text">Nutrition</div><div class="cs-line"></div></div>
     </div>
-
-    <!-- SLEEP -->
     <div class="tab-panel" id="panel-sleep">
-      <div class="coming-soon">
-        <div class="coming-soon-line"></div>
-        <div class="coming-soon-text">Sleep</div>
-        <div class="coming-soon-line"></div>
-      </div>
+      <div class="coming-soon"><div class="cs-line"></div><div class="cs-text">Sleep</div><div class="cs-line"></div></div>
     </div>
-
-    <!-- COACH -->
     <div class="tab-panel" id="panel-coach">
-      <div class="coming-soon">
-        <div class="coming-soon-line"></div>
-        <div class="coming-soon-text">Coach</div>
-        <div class="coming-soon-line"></div>
-      </div>
+      <div class="coming-soon"><div class="cs-line"></div><div class="cs-text">Coach</div><div class="cs-line"></div></div>
     </div>
-
   </div>
-
-  <!-- BOTTOM NAV -->
   <nav class="bottom-nav">
-    <button class="nav-tab active" data-tab="train" onclick="switchTab('train')">
-      <span class="nav-tab-label">Train</span>
-    </button>
-    <button class="nav-tab" data-tab="nutrition" onclick="switchTab('nutrition')">
-      <span class="nav-tab-label">Nutrition</span>
-    </button>
-    <button class="nav-tab" data-tab="sleep" onclick="switchTab('sleep')">
-      <span class="nav-tab-label">Sleep</span>
-    </button>
-    <button class="nav-tab" data-tab="coach" onclick="switchTab('coach')">
-      <span class="nav-tab-label">Coach</span>
-    </button>
+    <button class="nav-tab active" data-tab="train" onclick="switchTab('train')"><span class="nav-tab-label">Train</span></button>
+    <button class="nav-tab" data-tab="nutrition" onclick="switchTab('nutrition')"><span class="nav-tab-label">Nutrition</span></button>
+    <button class="nav-tab" data-tab="sleep" onclick="switchTab('sleep')"><span class="nav-tab-label">Sleep</span></button>
+    <button class="nav-tab" data-tab="coach" onclick="switchTab('coach')"><span class="nav-tab-label">Coach</span></button>
   </nav>
+</div>
 
+<!-- SESSION -->
+<div id="screen-session" class="screen">
+  <div class="session-header">
+    <button class="session-back" onclick="confirmLeaveSession()">← LEAVE</button>
+    <span class="session-name" id="session-name">WORKOUT</span>
+    <span class="session-timer" id="session-timer">0:00</span>
+  </div>
+  <div class="session-exercises" id="session-exercises"></div>
+  <div class="session-footer">
+    <button class="btn btn-primary" onclick="completeWorkout()">COMPLETE WORKOUT</button>
+  </div>
+</div>
+
+<!-- OVERLAY: CHECK-IN -->
+<div id="overlay-checkin" class="overlay" onclick="overlayBgClick(event,'overlay-checkin')">
+  <div class="overlay-sheet">
+    <div class="overlay-handle"></div>
+    <div class="overlay-title">Daily Check-In</div>
+    <div id="checkin-form">
+      <div class="field"><label>Energy Level</label><div class="scale-row" id="scale-energy"></div></div>
+      <div class="field"><label>Sleep Quality</label><div class="scale-row" id="scale-sleep"></div></div>
+      <div class="field"><label>Stress Level</label><div class="scale-row" id="scale-stress"></div></div>
+      <div class="field"><label>Motivation</label><div class="scale-row" id="scale-motivation"></div></div>
+      <div class="field"><label>Soreness</label><div class="scale-row" id="scale-soreness"></div></div>
+      <div class="field"><label>Body Weight (kg, optional)</label>
+        <input type="number" id="checkin-weight" step="0.1" placeholder="e.g. 65.5"></div>
+      <div class="field"><label>Notes (optional)</label>
+        <textarea id="checkin-notes" placeholder="How are you feeling today?"></textarea></div>
+      <div id="checkin-msg"></div>
+      <button class="btn btn-primary" onclick="submitCheckin()">SAVE CHECK-IN</button>
+    </div>
+  </div>
+</div>
+
+<!-- OVERLAY: PAIN LOG -->
+<div id="overlay-pain" class="overlay" onclick="overlayBgClick(event,'overlay-pain')">
+  <div class="overlay-sheet">
+    <div class="overlay-handle"></div>
+    <div class="overlay-title">Pain Journal</div>
+    <div class="field"><label>Body Part</label>
+      <input type="text" id="pain-part" placeholder="e.g. Left knee, lower back"></div>
+    <div class="field"><label>Pain Type</label>
+      <div class="radio-group" id="pain-type-group"></div></div>
+    <div class="field"><label>Intensity (1–10)</label>
+      <div class="scale-row" id="scale-pain"></div></div>
+    <div class="field"><label>When does it occur?</label>
+      <div class="radio-group" id="pain-when-group"></div></div>
+    <div class="field"><label>Notes (optional)</label>
+      <textarea id="pain-notes" placeholder="Describe what you feel..."></textarea></div>
+    <div id="pain-msg"></div>
+    <button class="btn btn-primary" onclick="submitPain()">SAVE ENTRY</button>
+  </div>
+</div>
+
+<!-- OVERLAY: LOG SET -->
+<div id="overlay-logset" class="overlay" onclick="overlayBgClick(event,'overlay-logset')">
+  <div class="overlay-sheet">
+    <div class="overlay-handle"></div>
+    <div class="overlay-title" id="logset-title">LOG SET</div>
+    <div class="field" id="logset-plan-info" style="margin-bottom:16px">
+      <span style="font-size:13px;color:var(--muted)"></span></div>
+    <div class="row2">
+      <div class="field"><label>Reps</label><input type="number" id="logset-reps" placeholder="10" min="0"></div>
+      <div class="field"><label>Weight (kg)</label><input type="number" id="logset-weight" placeholder="60" step="0.5" min="0"></div>
+    </div>
+    <div class="field"><label>RPE (1–10, optional)</label>
+      <div class="scale-row" id="scale-logset-rpe"></div></div>
+    <div id="logset-msg"></div>
+    <button class="btn btn-primary" onclick="submitLogSet()">LOG SET</button>
+  </div>
+</div>
+
+<!-- OVERLAY: FEEDBACK -->
+<div id="overlay-feedback" class="overlay" onclick="overlayBgClick(event,'overlay-feedback')">
+  <div class="overlay-sheet">
+    <div class="overlay-handle"></div>
+    <div class="overlay-title">Workout Complete</div>
+    <p id="feedback-text" class="feedback-text">Generating feedback...</p>
+    <div style="height:16px"></div>
+    <button class="btn btn-primary" onclick="closeOverlay('overlay-feedback')">DONE</button>
+  </div>
 </div>
 
 <script>
-  // ── Telegram init ──
-  const tg = window.Telegram?.WebApp;
-  if (tg) {
-    tg.ready();
-    tg.expand();
-    tg.setHeaderColor('#080808');
-    tg.setBackgroundColor('#080808');
-    const user = tg.initDataUnsafe?.user;
-    if (user?.first_name) {
-      document.getElementById('user-name').textContent = user.first_name.toUpperCase();
-    }
-  }
+const tg = window.Telegram?.WebApp;
+if (tg) { tg.ready(); tg.expand(); tg.setHeaderColor('#080808'); tg.setBackgroundColor('#080808'); }
 
-  // ── Date ──
+// ── STATE ──
+const S = {
+  jwt: localStorage.getItem('bca_jwt'),
+  todayWorkout: null,
+  sessionId: null,
+  sessionExercises: {}, // exerciseId -> [{set_number, reps, weight, rpe}]
+  sessionStartTime: null,
+  timerInterval: null,
+  logsetTarget: null,  // {exerciseId, exerciseName, setNum, planInfo}
+  obSteps: [],
+  obIndex: 0,
+  obData: {},
+};
+
+// ── SCREEN/OVERLAY ──
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById('screen-'+id).classList.add('active');
+}
+function openOverlay(id) { document.getElementById(id).classList.add('open'); }
+function closeOverlay(id) { document.getElementById(id).classList.remove('open'); }
+function overlayBgClick(e, id) { if (e.target.id === id) closeOverlay(id); }
+
+// ── API ──
+async function api(method, path, body) {
+  try {
+    const r = await fetch(path, {
+      method,
+      headers: {
+        'Content-Type': 'application/json',
+        ...(S.jwt ? {'Authorization': 'Bearer '+S.jwt} : {}),
+      },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    return r.json();
+  } catch(e) { return {success:false, error:{message: e.message}}; }
+}
+function haptic(type='light') { tg?.HapticFeedback?.impactOccurred(type); }
+
+// ── INIT ──
+async function init() {
+  // Set date
   const now = new Date();
-  document.getElementById('today-date').textContent = now.toLocaleDateString('en-US', {
-    weekday: 'short', month: 'short', day: 'numeric'
-  }).toUpperCase();
+  const el = document.getElementById('today-date');
+  if (el) el.textContent = now.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'}).toUpperCase();
 
-  // ── Tab switching ──
-  function switchTab(name) {
-    document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
-    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
-    document.querySelector(`[data-tab="${name}"]`).classList.add('active');
-    document.getElementById(`panel-${name}`).classList.add('active');
+  setLoading('Connecting...');
+
+  // Auth
+  if (!S.jwt) {
+    const initData = tg?.initData || '';
+    const res = await api('POST', '/api/auth/validate', {init_data: initData});
+    if (!res.success) {
+      setLoading('Auth failed. Open via Telegram.');
+      return;
+    }
+    S.jwt = res.data.token;
+    localStorage.setItem('bca_jwt', S.jwt);
   }
 
-  // ── Actions (stub) ──
-  function startWorkout()  { tg?.HapticFeedback?.impactOccurred('medium'); }
-  function openCheckin()   { tg?.HapticFeedback?.impactOccurred('light'); }
-  function openPainLog()   { tg?.HapticFeedback?.impactOccurred('light'); }
+  // Set user name
+  const tgUser = tg?.initDataUnsafe?.user;
+  if (tgUser?.first_name) {
+    const el = document.getElementById('user-name');
+    if (el) el.textContent = tgUser.first_name.toUpperCase();
+  }
+
+  // Onboarding check
+  setLoading('Loading profile...');
+  const ob = await api('GET', '/api/training/onboarding/status');
+  if (!ob.success) { S.jwt = null; localStorage.removeItem('bca_jwt'); init(); return; }
+
+  if (!ob.data.completed) {
+    S.obSteps = ob.data.steps;
+    S.obIndex = 0;
+    renderObStep();
+    showScreen('onboarding');
+    return;
+  }
+
+  await loadMain();
+}
+
+function setLoading(msg) {
+  const el = document.getElementById('loading-label');
+  if (el) el.textContent = msg;
+}
+
+// ── MAIN ──
+async function loadMain() {
+  setLoading('Loading workout...');
+  const r = await api('GET', '/api/training/today');
+  S.todayWorkout = r.success ? r.data : null;
+  renderTrainTab();
+  showScreen('main');
+}
+
+function renderTrainTab() {
+  const el = document.getElementById('train-content');
+  const w = S.todayWorkout;
+
+  if (!w) {
+    el.innerHTML = `
+      <div class="no-program-card">
+        <div class="np-title">No Program Yet</div>
+        <div class="np-body">Generate your personalized training program to get started.</div>
+        <button class="btn btn-primary" onclick="generateProgram()">GENERATE PROGRAM</button>
+      </div>`;
+    return;
+  }
+
+  if (w.rest_day) {
+    el.innerHTML = `
+      <div class="rest-card">
+        <div class="hero-label">Today</div>
+        <div class="rest-title">Rest Day</div>
+        <div style="font-size:13px;color:var(--muted);margin-top:8px">Recover. You've earned it.</div>
+      </div>`;
+    return;
+  }
+
+  const exCount = w.exercises?.length || 0;
+  const setCount = w.exercises?.reduce((s,e) => s + (e.sets?.length||0), 0) || 0;
+  const estMin = Math.round(setCount * 2.5 + exCount * 2);
+
+  el.innerHTML = `
+    <div class="hero-card">
+      <div class="hero-label">Today's Training</div>
+      <div class="hero-title">${w.name || 'WORKOUT'}</div>
+      <div class="hero-stats">
+        <div class="stat"><span class="stat-value">${exCount}</span><span class="stat-label">Exercises</span></div>
+        <div class="stat"><span class="stat-value">${setCount}</span><span class="stat-label">Sets</span></div>
+        <div class="stat"><span class="stat-value">${estMin}</span><span class="stat-label">Est. min</span></div>
+      </div>
+      <button class="btn btn-primary" onclick="startWorkout()">START WORKOUT</button>
+    </div>`;
+}
+
+async function generateProgram() {
+  document.querySelector('#train-content .btn').textContent = 'GENERATING...';
+  document.querySelector('#train-content .btn').disabled = true;
+  const r = await api('POST', '/api/training/program/generate');
+  if (r.success) {
+    await loadMain();
+  } else {
+    document.querySelector('#train-content .btn').textContent = 'TRY AGAIN';
+    document.querySelector('#train-content .btn').disabled = false;
+  }
+}
+
+// ── TAB SWITCH ──
+function switchTab(name) {
+  document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  document.querySelector(`[data-tab="${name}"]`).classList.add('active');
+  document.getElementById(`panel-${name}`).classList.add('active');
+  haptic();
+}
+
+// ── SESSION ──
+async function startWorkout() {
+  haptic('medium');
+  const body = S.todayWorkout?.id ? {workout_id: S.todayWorkout.id} : {};
+  const r = await api('POST', '/api/training/session/start', body);
+  if (!r.success) { alert('Could not start session'); return; }
+  S.sessionId = r.data.session_id;
+  S.sessionExercises = {};
+  S.sessionStartTime = Date.now();
+  renderSession();
+  showScreen('session');
+  startTimer();
+}
+
+function renderSession() {
+  const w = S.todayWorkout;
+  document.getElementById('session-name').textContent = w?.name || 'FREE WORKOUT';
+  const container = document.getElementById('session-exercises');
+  if (!w?.exercises?.length) {
+    container.innerHTML = '<div style="color:var(--muted);text-align:center;padding:40px">Free workout — log any exercise below</div>';
+    return;
+  }
+  container.innerHTML = w.exercises.map(ex => renderExerciseCard(ex)).join('');
+}
+
+function renderExerciseCard(ex) {
+  const logged = S.sessionExercises[ex.exercise_id] || [];
+  const planStr = ex.sets?.length
+    ? `${ex.sets.length} × ${ex.sets[0].target_reps || '?'} reps`
+      + (ex.sets[0].target_weight_kg ? ` @ ${ex.sets[0].target_weight_kg}kg` : '')
+      + (ex.sets[0].target_rpe ? ` RPE ${ex.sets[0].target_rpe}` : '')
+    : 'No plan';
+  const setsHTML = logged.map((s,i) =>
+    `<div class="set-row">
+      <span class="set-num">${i+1}</span>
+      <span class="set-data">${s.reps} reps × ${s.weight}kg${s.rpe ? ' @ RPE '+s.rpe : ''}</span>
+      <span class="set-done">✓</span>
+    </div>`).join('');
+  const nextSet = logged.length + 1;
+  const planSet = ex.sets?.[logged.length];
+  return `<div class="ex-card" id="ex-${ex.exercise_id}">
+    <div class="ex-card-header">
+      <div class="ex-name">${ex.exercise_name}</div>
+      <div class="ex-plan">${planStr}</div>
+    </div>
+    ${setsHTML ? `<div class="ex-sets">${setsHTML}</div>` : ''}
+    <button class="ex-log-btn" onclick="openLogSet(${ex.exercise_id},'${ex.exercise_name.replace(/'/g,"\\'")}',${nextSet},${JSON.stringify(JSON.stringify(planSet||null))})">+ LOG SET ${nextSet}</button>
+  </div>`;
+}
+
+function openLogSet(exerciseId, exerciseName, setNum, planJSON) {
+  const plan = planJSON ? JSON.parse(planJSON) : null;
+  S.logsetTarget = {exerciseId, exerciseName, setNum, plan};
+  document.getElementById('logset-title').textContent = `${exerciseName} — SET ${setNum}`;
+  const info = document.querySelector('#logset-plan-info span');
+  info.textContent = plan
+    ? `Target: ${plan.target_reps||'?'} reps${plan.target_weight_kg?' × '+plan.target_weight_kg+'kg':''}`
+      + `${plan.target_rpe?' @ RPE '+plan.target_rpe:''}`
+    : '';
+  document.getElementById('logset-reps').value = '';
+  document.getElementById('logset-weight').value = plan?.target_weight_kg || '';
+  clearScale('scale-logset-rpe');
+  document.getElementById('logset-msg').textContent = '';
+  haptic();
+  openOverlay('overlay-logset');
+}
+
+async function submitLogSet() {
+  const t = S.logsetTarget;
+  const reps = parseInt(document.getElementById('logset-reps').value);
+  const weight = parseFloat(document.getElementById('logset-weight').value) || 0;
+  const rpe = getScale('scale-logset-rpe');
+  if (!reps) { document.getElementById('logset-msg').innerHTML = '<div class="error-msg">Enter reps</div>'; return; }
+
+  const r = await api('POST', '/api/training/session/log-set', {
+    session_id: S.sessionId,
+    exercise_id: t.exerciseId,
+    set_number: t.setNum,
+    actual_reps: reps,
+    actual_weight_kg: weight,
+    actual_rpe: rpe,
+  });
+  if (!r.success) { document.getElementById('logset-msg').innerHTML = '<div class="error-msg">Error saving</div>'; return; }
+
+  if (!S.sessionExercises[t.exerciseId]) S.sessionExercises[t.exerciseId] = [];
+  S.sessionExercises[t.exerciseId].push({reps, weight, rpe});
+
+  closeOverlay('overlay-logset');
+  haptic('medium');
+
+  // Re-render just this exercise card
+  const w = S.todayWorkout;
+  const ex = w?.exercises?.find(e => e.exercise_id === t.exerciseId);
+  if (ex) {
+    const card = document.getElementById('ex-'+t.exerciseId);
+    if (card) card.outerHTML = renderExerciseCard(ex);
+  }
+}
+
+async function completeWorkout() {
+  haptic('heavy');
+  stopTimer();
+  const r = await api('POST', '/api/training/session/complete', {session_id: S.sessionId});
+  showScreen('main');
+  if (r.success && r.data?.feedback) {
+    document.getElementById('feedback-text').textContent = r.data.feedback;
+    openOverlay('overlay-feedback');
+  }
+}
+
+function confirmLeaveSession() {
+  if (confirm('Leave workout? Progress will be saved.')) {
+    stopTimer();
+    showScreen('main');
+  }
+}
+
+// ── TIMER ──
+function startTimer() {
+  S.timerInterval = setInterval(() => {
+    const elapsed = Math.floor((Date.now() - S.sessionStartTime) / 1000);
+    const m = Math.floor(elapsed / 60);
+    const s = elapsed % 60;
+    const el = document.getElementById('session-timer');
+    if (el) el.textContent = m + ':' + String(s).padStart(2,'0');
+  }, 1000);
+}
+function stopTimer() { clearInterval(S.timerInterval); }
+
+// ── CHECK-IN ──
+function openCheckin() {
+  buildScaleRow('scale-energy'); buildScaleRow('scale-sleep');
+  buildScaleRow('scale-stress'); buildScaleRow('scale-motivation');
+  buildScaleRow('scale-soreness');
+  document.getElementById('checkin-weight').value = '';
+  document.getElementById('checkin-notes').value = '';
+  document.getElementById('checkin-msg').textContent = '';
+  haptic(); openOverlay('overlay-checkin');
+}
+async function submitCheckin() {
+  const body = {
+    energy_level: getScale('scale-energy'),
+    sleep_quality: getScale('scale-sleep'),
+    stress_level: getScale('scale-stress'),
+    motivation: getScale('scale-motivation'),
+    soreness_level: getScale('scale-soreness'),
+    body_weight_kg: parseFloat(document.getElementById('checkin-weight').value)||null,
+    notes: document.getElementById('checkin-notes').value||null,
+  };
+  const r = await api('POST', '/api/checkin', body);
+  const el = document.getElementById('checkin-msg');
+  if (r.success) {
+    el.innerHTML = '<div class="success-msg">Saved!</div>';
+    haptic('medium');
+    setTimeout(() => closeOverlay('overlay-checkin'), 800);
+  } else {
+    el.innerHTML = '<div class="error-msg">'+(r.error?.message||'Error')+'</div>';
+  }
+}
+
+// ── PAIN LOG ──
+function openPainLog() {
+  buildRadioGroup('pain-type-group', ['sharp','dull','aching','burning'], 'pain-type');
+  buildRadioGroup('pain-when-group', ['during','after','morning','always'], 'pain-when');
+  buildScaleRow('scale-pain');
+  document.getElementById('pain-part').value = '';
+  document.getElementById('pain-notes').value = '';
+  document.getElementById('pain-msg').textContent = '';
+  haptic(); openOverlay('overlay-pain');
+}
+async function submitPain() {
+  const body = {
+    body_part: document.getElementById('pain-part').value,
+    pain_type: getRadio('pain-type'),
+    intensity: getScale('scale-pain'),
+    when_occurs: getRadio('pain-when'),
+    notes: document.getElementById('pain-notes').value||null,
+  };
+  if (!body.body_part) { document.getElementById('pain-msg').innerHTML='<div class="error-msg">Enter body part</div>'; return; }
+  const r = await api('POST', '/api/pain', body);
+  const el = document.getElementById('pain-msg');
+  if (r.success) {
+    el.innerHTML = '<div class="success-msg">Logged!</div>';
+    haptic('medium');
+    setTimeout(() => closeOverlay('overlay-pain'), 800);
+  } else {
+    el.innerHTML = '<div class="error-msg">'+(r.error?.message||'Error')+'</div>';
+  }
+}
+
+// ── ONBOARDING ──
+const OB_CONFIG = {
+  basic_data:             { title: 'Basic Info',         fields: [
+    {k:'name',label:'Your Name',type:'text',ph:'e.g. Natalie'},
+    {k:'gender',label:'Gender',type:'radio',opts:['female','male','other']},
+    {k:'age',label:'Age',type:'number',ph:'25',min:14,max:100},
+    {k:'weight_kg',label:'Weight (kg)',type:'number',ph:'65',step:.1},
+    {k:'height_cm',label:'Height (cm)',type:'number',ph:'168'},
+  ]},
+  goals:                  { title: 'Your Goals',         fields: [
+    {k:'goal_primary',label:'Primary Goal',type:'radio',opts:['hypertrophy','strength','health','weight_loss']},
+    {k:'goal_secondary',label:'Secondary Goals (optional)',type:'check',opts:['hypertrophy','strength','health','weight_loss','endurance']},
+  ]},
+  training_experience:    { title: 'Experience',         fields: [
+    {k:'level',label:'Training Level',type:'radio',opts:['beginner','intermediate','advanced']},
+    {k:'training_days_per_week',label:'Days per week',type:'number',ph:'4',min:1,max:7},
+    {k:'session_duration_min',label:'Session duration (min)',type:'number',ph:'60',min:20,max:180},
+    {k:'equipment',label:'Equipment Available',type:'check',opts:['full_gym','home_gym','dumbbells','barbell','none']},
+  ]},
+  physical_characteristics:{ title: 'Physical Profile',  fields: [
+    {k:'injuries_current',label:'Current injuries (comma-separated, or leave empty)',type:'text',ph:'e.g. left knee, lower back'},
+    {k:'injuries_history',label:'Past injuries',type:'text',ph:'e.g. right shoulder 2023'},
+    {k:'postural_issues',label:'Postural issues',type:'text',ph:'e.g. anterior pelvic tilt'},
+    {k:'mobility_issues',label:'Mobility limitations',type:'text',ph:'e.g. hip flexors, thoracic'},
+  ]},
+  menstrual_cycle:        { title: 'Cycle Tracking',     fields: [
+    {k:'menstrual_tracking',label:'Track menstrual cycle?',type:'radio',opts:['yes','no']},
+    {k:'cycle_length_days',label:'Cycle length (days)',type:'number',ph:'28',min:21,max:45},
+    {k:'last_period_date',label:'Last period date',type:'date'},
+  ]},
+  training_style:         { title: 'Training Style',     fields: [
+    {k:'training_likes',label:'What do you enjoy?',type:'textarea',ph:'e.g. heavy compounds, short rest'},
+    {k:'training_dislikes',label:'What do you avoid?',type:'textarea',ph:'e.g. running, machines'},
+    {k:'had_coach_before',label:'Had a coach before?',type:'radio',opts:['yes','no']},
+  ]},
+  psychology:             { title: 'Motivation',         fields: [
+    {k:'motivation_type',label:'What drives you most?',type:'radio',opts:['result','process','health']},
+  ]},
+  previous_program:       { title: 'Previous Program',   fields: [
+    {k:'previous_program_notes',label:'Notes on previous training (optional)',type:'textarea',ph:'e.g. 5x5 program for 6 months, got stuck at 80kg squat'},
+  ]},
+  body_measurements:      { title: 'Measurements',       fields: [
+    {k:'weight_kg',label:'Weight (kg)',type:'number',ph:'65',step:.1},
+    {k:'body_fat_pct',label:'Body fat % (optional)',type:'number',ph:'20',step:.1},
+    {k:'waist_cm',label:'Waist (cm)',type:'number',ph:'70'},
+    {k:'hips_cm',label:'Hips (cm)',type:'number',ph:'95'},
+    {k:'chest_cm',label:'Chest (cm)',type:'number',ph:'90'},
+  ]},
+};
+
+function renderObStep() {
+  const steps = S.obSteps;
+  const step = steps[S.obIndex];
+  const cfg = OB_CONFIG[step] || {title: step.replace(/_/g,' '), fields:[]};
+  const isLast = S.obIndex === steps.length - 1;
+
+  // Progress
+  const progress = document.getElementById('ob-progress');
+  progress.innerHTML = steps.map((s,i) =>
+    `<div class="ob-dot ${i<S.obIndex?'done':i===S.obIndex?'active':''}"></div>`).join('');
+
+  document.getElementById('ob-step-label').textContent = `Step ${S.obIndex+1} of ${steps.length}`;
+  document.getElementById('ob-title').textContent = cfg.title.toUpperCase();
+  document.getElementById('ob-back').style.display = S.obIndex > 0 ? 'block' : 'none';
+  document.getElementById('ob-next').textContent = isLast ? 'FINISH' : 'NEXT';
+
+  // Render fields
+  const saved = S.obData[step] || {};
+  document.getElementById('ob-body').innerHTML = cfg.fields.map(f => renderField(f, saved[f.k])).join('');
+}
+
+function renderField(f, val) {
+  if (f.type === 'radio') {
+    const opts = f.opts.map(o =>
+      `<div class="radio-opt${val===o?' sel':''}" onclick="pickRadio(this,'${f.k}','${o}')"><span>${o.replace(/_/g,' ')}</span></div>`).join('');
+    return `<div class="field" data-key="${f.k}"><label>${f.label}</label><div class="radio-group">${opts}</div></div>`;
+  }
+  if (f.type === 'check') {
+    const arr = Array.isArray(val) ? val : [];
+    const opts = f.opts.map(o =>
+      `<div class="check-opt${arr.includes(o)?' sel':''}" onclick="pickCheck(this,'${f.k}','${o}')"><span>${o.replace(/_/g,' ')}</span></div>`).join('');
+    return `<div class="field" data-key="${f.k}"><label>${f.label}</label><div class="check-group">${opts}</div></div>`;
+  }
+  if (f.type === 'textarea') {
+    return `<div class="field" data-key="${f.k}"><label>${f.label}</label><textarea data-key="${f.k}" placeholder="${f.ph||''}">${val||''}</textarea></div>`;
+  }
+  return `<div class="field" data-key="${f.k}"><label>${f.label}</label>
+    <input type="${f.type}" data-key="${f.k}" value="${val||''}" placeholder="${f.ph||''}"
+      ${f.min!==undefined?'min='+f.min:''} ${f.max!==undefined?'max='+f.max:''} ${f.step!==undefined?'step='+f.step:''}></div>`;
+}
+
+function pickRadio(el, key, val) {
+  el.closest('.radio-group').querySelectorAll('.radio-opt').forEach(e => e.classList.remove('sel'));
+  el.classList.add('sel');
+  el.closest('.field').dataset.value = val;
+}
+function pickCheck(el, key, val) { el.classList.toggle('sel'); }
+
+function collectObStep() {
+  const step = S.obSteps[S.obIndex];
+  const cfg = OB_CONFIG[step] || {fields:[]};
+  const data = {};
+  cfg.fields.forEach(f => {
+    if (f.type === 'radio') {
+      const sel = document.querySelector(`[data-key="${f.k}"] .radio-opt.sel span`);
+      if (sel) data[f.k] = sel.textContent.replace(/ /g,'_');
+    } else if (f.type === 'check') {
+      data[f.k] = Array.from(document.querySelectorAll(`[data-key="${f.k}"] .check-opt.sel span`))
+        .map(e => e.textContent.replace(/ /g,'_'));
+    } else if (f.type === 'textarea' || f.type === 'text') {
+      const el = document.querySelector(`textarea[data-key="${f.k}"], input[data-key="${f.k}"]`);
+      if (el && el.value) {
+        // For JSON array fields, split by comma
+        if (['injuries_current','injuries_history','postural_issues','mobility_issues','muscle_imbalances'].includes(f.k)) {
+          data[f.k] = el.value ? el.value.split(',').map(s=>s.trim()).filter(Boolean) : null;
+        } else {
+          data[f.k] = el.value;
+        }
+      }
+    } else {
+      const el = document.querySelector(`input[data-key="${f.k}"]`);
+      if (el && el.value !== '') data[f.k] = f.type==='number' ? Number(el.value) : el.value;
+    }
+  });
+  // Normalize yes/no to bool for certain fields
+  if (data.had_coach_before !== undefined) data.had_coach_before = data.had_coach_before === 'yes';
+  if (data.menstrual_tracking !== undefined) data.menstrual_tracking = data.menstrual_tracking === 'yes';
+  return data;
+}
+
+async function obNext() {
+  const step = S.obSteps[S.obIndex];
+  const data = collectObStep();
+  S.obData[step] = data;
+
+  const r = await api('POST', '/api/training/onboarding/step', {step, data});
+  if (!r.success) { /* swallow — continue anyway */ }
+
+  if (S.obIndex === S.obSteps.length - 1) {
+    // Complete onboarding
+    await api('POST', '/api/training/onboarding/complete');
+    haptic('heavy');
+    await loadMain();
+    return;
+  }
+
+  S.obIndex++;
+  renderObStep();
+  document.getElementById('ob-body').scrollTop = 0;
+}
+
+function obBack() {
+  if (S.obIndex > 0) { S.obIndex--; renderObStep(); }
+}
+
+// ── SCALE / RADIO HELPERS ──
+function buildScaleRow(id, max=10) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.innerHTML = Array.from({length:max},(_,i)=>i+1).map(n =>
+    `<button class="scale-btn" onclick="pickScale('${id}',${n},this)">${n}</button>`).join('');
+}
+function clearScale(id) { buildScaleRow(id); }
+function pickScale(id, val, btn) {
+  document.querySelectorAll(`#${id} .scale-btn`).forEach(b => b.classList.remove('sel'));
+  btn.classList.add('sel');
+  btn.closest('.scale-row').dataset.value = val;
+  haptic();
+}
+function getScale(id) { return parseInt(document.querySelector(`#${id}`).dataset.value)||null; }
+
+function buildRadioGroup(id, opts, key) {
+  document.getElementById(id).innerHTML = opts.map(o =>
+    `<div class="radio-opt" onclick="pickGroupRadio('${id}',this,'${key}')"><span>${o}</span></div>`).join('');
+}
+function pickGroupRadio(id, el, key) {
+  document.querySelectorAll(`#${id} .radio-opt`).forEach(e => e.classList.remove('sel'));
+  el.classList.add('sel');
+  document.getElementById(id).dataset.value = el.querySelector('span').textContent;
+  haptic();
+}
+function getRadio(key) {
+  const el = document.getElementById(`${key}-group`)||document.querySelector(`[data-key="${key}"]`);
+  return el?.dataset.value || null;
+}
+
+// Build scales on page load for overlays
+buildScaleRow('scale-pain');
+buildScaleRow('scale-logset-rpe');
+
+// ── START ──
+init();
 </script>
 </body>
 </html>
