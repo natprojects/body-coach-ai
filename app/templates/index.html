@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Body Coach AI</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700;800&family=DM+Sans:wght@400;500&display=swap" rel="stylesheet">
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #080808;
+      --accent: #0055FF;
+      --accent-dim: rgba(0, 85, 255, 0.20);
+      --accent-glow: rgba(0, 85, 255, 0.35);
+      --text: #FFFFFF;
+      --text-muted: #666;
+      --card-bg: #0e0e0e;
+      --border: rgba(255,255,255,0.06);
+    }
+
+    html, body {
+      height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'DM Sans', sans-serif;
+      overflow: hidden;
+      -webkit-tap-highlight-color: transparent;
+      user-select: none;
+    }
+
+    /* ── LAYOUT ── */
+    #app {
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+      height: 100dvh;
+      padding: env(safe-area-inset-top) 0 env(safe-area-inset-bottom);
+    }
+
+    /* ── STATUS BAR ── */
+    .status-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 14px 20px 10px;
+      flex-shrink: 0;
+    }
+    .status-bar .user-name {
+      font-family: 'Barlow Condensed', sans-serif;
+      font-weight: 700;
+      font-size: 15px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--text);
+    }
+    .status-bar .today-date {
+      font-size: 12px;
+      color: var(--text-muted);
+      letter-spacing: 0.05em;
+    }
+
+    /* ── CONTENT AREA ── */
+    .content {
+      flex: 1;
+      overflow: hidden;
+      position: relative;
+    }
+    .tab-panel {
+      position: absolute;
+      inset: 0;
+      padding: 8px 16px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.22s ease;
+    }
+    .tab-panel.active {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    /* ── COMING SOON ── */
+    .coming-soon {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+    }
+    .coming-soon-line {
+      width: 40px;
+      height: 2px;
+      background: var(--accent);
+      box-shadow: 0 0 10px var(--accent);
+    }
+    .coming-soon-text {
+      font-family: 'Barlow Condensed', sans-serif;
+      font-weight: 700;
+      font-size: 22px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+    }
+
+    /* ── HERO CARD ── */
+    .hero-card {
+      position: relative;
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 24px 22px 20px;
+      overflow: hidden;
+      flex-shrink: 0;
+      transition: box-shadow 0.2s;
+    }
+    .hero-card:active {
+      box-shadow: 0 0 28px var(--accent-glow);
+    }
+
+    /* diagonal blue slash */
+    .hero-card::before {
+      content: '';
+      position: absolute;
+      top: 0; right: 0;
+      width: 100%; height: 100%;
+      background: linear-gradient(
+        118deg,
+        transparent 0%,
+        transparent 56%,
+        rgba(0, 85, 255, 0.08) 56%,
+        rgba(0, 85, 255, 0.08) 58%,
+        transparent 58%
+      );
+      pointer-events: none;
+    }
+    /* blue accent top-left corner bar */
+    .hero-card::after {
+      content: '';
+      position: absolute;
+      top: 0; left: 0;
+      width: 3px; height: 60%;
+      background: var(--accent);
+      box-shadow: 0 0 12px var(--accent);
+    }
+
+    .hero-label {
+      font-family: 'Barlow Condensed', sans-serif;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin-bottom: 8px;
+    }
+    .hero-title {
+      font-family: 'Barlow Condensed', sans-serif;
+      font-size: 34px;
+      font-weight: 800;
+      line-height: 1.0;
+      letter-spacing: 0.02em;
+      text-transform: uppercase;
+      margin-bottom: 20px;
+    }
+    .hero-stats {
+      display: flex;
+      gap: 0;
+      margin-bottom: 22px;
+    }
+    .stat {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+      padding-right: 16px;
+      border-right: 1px solid var(--border);
+    }
+    .stat:last-child {
+      border-right: none;
+      padding-right: 0;
+      padding-left: 16px;
+    }
+    .stat:not(:first-child):not(:last-child) {
+      padding-left: 16px;
+    }
+    .stat-value {
+      font-family: 'Barlow Condensed', sans-serif;
+      font-size: 26px;
+      font-weight: 700;
+      color: var(--text);
+      line-height: 1;
+    }
+    .stat-label {
+      font-size: 10px;
+      color: var(--text-muted);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .btn-start {
+      width: 100%;
+      padding: 14px;
+      background: var(--accent);
+      border: none;
+      border-radius: 3px;
+      color: #fff;
+      font-family: 'Barlow Condensed', sans-serif;
+      font-size: 16px;
+      font-weight: 700;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      cursor: pointer;
+      position: relative;
+      overflow: hidden;
+      transition: box-shadow 0.2s;
+    }
+    .btn-start::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: rgba(255,255,255,0.08);
+      opacity: 0;
+      transition: opacity 0.15s;
+    }
+    .btn-start:active::after { opacity: 1; }
+    .btn-start:active {
+      box-shadow: 0 0 24px var(--accent-glow), 0 0 48px var(--accent-glow);
+    }
+
+    /* ── QUICK ACTION CARDS ── */
+    .quick-cards {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      flex-shrink: 0;
+    }
+    .quick-card {
+      background: var(--accent-dim);
+      border: 1px solid rgba(0, 85, 255, 0.25);
+      border-radius: 4px;
+      padding: 16px 14px;
+      cursor: pointer;
+      position: relative;
+      overflow: hidden;
+      transition: box-shadow 0.2s;
+    }
+    .quick-card::before {
+      content: '';
+      position: absolute;
+      bottom: 0; right: 0;
+      width: 40%;
+      height: 2px;
+      background: var(--accent);
+      opacity: 0.5;
+    }
+    .quick-card:active {
+      box-shadow: 0 0 18px var(--accent-glow);
+    }
+    .quick-card-label {
+      font-size: 10px;
+      color: var(--accent);
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      margin-bottom: 6px;
+    }
+    .quick-card-title {
+      font-family: 'Barlow Condensed', sans-serif;
+      font-size: 18px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      line-height: 1.1;
+    }
+
+    /* ── BOTTOM NAV ── */
+    .bottom-nav {
+      display: flex;
+      border-top: 1px solid var(--border);
+      flex-shrink: 0;
+      padding-bottom: env(safe-area-inset-bottom, 0px);
+    }
+    .nav-tab {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 12px 4px 10px;
+      cursor: pointer;
+      position: relative;
+      gap: 0;
+      background: none;
+      border: none;
+      transition: color 0.2s;
+    }
+    .nav-tab::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 20%; right: 20%;
+      height: 2px;
+      background: var(--accent);
+      box-shadow: 0 0 8px var(--accent);
+      opacity: 0;
+      transition: opacity 0.2s;
+    }
+    .nav-tab.active::before { opacity: 1; }
+    .nav-tab-label {
+      font-family: 'Barlow Condensed', sans-serif;
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      transition: color 0.2s;
+    }
+    .nav-tab.active .nav-tab-label {
+      color: var(--accent);
+    }
+  </style>
+</head>
+<body>
+<div id="app">
+
+  <!-- STATUS BAR -->
+  <div class="status-bar">
+    <span class="user-name" id="user-name">ATHLETE</span>
+    <span class="today-date" id="today-date"></span>
+  </div>
+
+  <!-- CONTENT -->
+  <div class="content">
+
+    <!-- TRAIN -->
+    <div class="tab-panel active" id="panel-train">
+      <div class="hero-card">
+        <div class="hero-label">Today's Training</div>
+        <div class="hero-title" id="workout-name">UPPER BODY A</div>
+        <div class="hero-stats">
+          <div class="stat">
+            <span class="stat-value" id="stat-exercises">6</span>
+            <span class="stat-label">Exercises</span>
+          </div>
+          <div class="stat">
+            <span class="stat-value" id="stat-sets">18</span>
+            <span class="stat-label">Sets</span>
+          </div>
+          <div class="stat">
+            <span class="stat-value" id="stat-time">55</span>
+            <span class="stat-label">Est. min</span>
+          </div>
+        </div>
+        <button class="btn-start" onclick="startWorkout()">START WORKOUT</button>
+      </div>
+
+      <div class="quick-cards">
+        <div class="quick-card" onclick="openCheckin()">
+          <div class="quick-card-label">Daily</div>
+          <div class="quick-card-title">Check-In</div>
+        </div>
+        <div class="quick-card" onclick="openPainLog()">
+          <div class="quick-card-label">Body</div>
+          <div class="quick-card-title">Pain Log</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- NUTRITION -->
+    <div class="tab-panel" id="panel-nutrition">
+      <div class="coming-soon">
+        <div class="coming-soon-line"></div>
+        <div class="coming-soon-text">Nutrition</div>
+        <div class="coming-soon-line"></div>
+      </div>
+    </div>
+
+    <!-- SLEEP -->
+    <div class="tab-panel" id="panel-sleep">
+      <div class="coming-soon">
+        <div class="coming-soon-line"></div>
+        <div class="coming-soon-text">Sleep</div>
+        <div class="coming-soon-line"></div>
+      </div>
+    </div>
+
+    <!-- COACH -->
+    <div class="tab-panel" id="panel-coach">
+      <div class="coming-soon">
+        <div class="coming-soon-line"></div>
+        <div class="coming-soon-text">Coach</div>
+        <div class="coming-soon-line"></div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- BOTTOM NAV -->
+  <nav class="bottom-nav">
+    <button class="nav-tab active" data-tab="train" onclick="switchTab('train')">
+      <span class="nav-tab-label">Train</span>
+    </button>
+    <button class="nav-tab" data-tab="nutrition" onclick="switchTab('nutrition')">
+      <span class="nav-tab-label">Nutrition</span>
+    </button>
+    <button class="nav-tab" data-tab="sleep" onclick="switchTab('sleep')">
+      <span class="nav-tab-label">Sleep</span>
+    </button>
+    <button class="nav-tab" data-tab="coach" onclick="switchTab('coach')">
+      <span class="nav-tab-label">Coach</span>
+    </button>
+  </nav>
+
+</div>
+
+<script>
+  // ── Telegram init ──
+  const tg = window.Telegram?.WebApp;
+  if (tg) {
+    tg.ready();
+    tg.expand();
+    tg.setHeaderColor('#080808');
+    tg.setBackgroundColor('#080808');
+    const user = tg.initDataUnsafe?.user;
+    if (user?.first_name) {
+      document.getElementById('user-name').textContent = user.first_name.toUpperCase();
+    }
+  }
+
+  // ── Date ──
+  const now = new Date();
+  document.getElementById('today-date').textContent = now.toLocaleDateString('en-US', {
+    weekday: 'short', month: 'short', day: 'numeric'
+  }).toUpperCase();
+
+  // ── Tab switching ──
+  function switchTab(name) {
+    document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+    document.querySelector(`[data-tab="${name}"]`).classList.add('active');
+    document.getElementById(`panel-${name}`).classList.add('active');
+  }
+
+  // ── Actions (stub) ──
+  function startWorkout()  { tg?.HapticFeedback?.impactOccurred('medium'); }
+  function openCheckin()   { tg?.HapticFeedback?.impactOccurred('light'); }
+  function openPainLog()   { tg?.HapticFeedback?.impactOccurred('light'); }
+</script>
+</body>
+</html>

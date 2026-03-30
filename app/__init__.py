@@ -1,4 +1,4 @@
-from flask import Flask, jsonify
+from flask import Flask, jsonify, render_template
 from .config import Config
 from .extensions import db, migrate
 
@@ -17,6 +17,10 @@ def create_app(config_class=Config):
 
     from .modules.training import bp as training_bp
     app.register_blueprint(training_bp, url_prefix='/api')
+
+    @app.route('/')
+    def index():
+        return render_template('index.html')
 
     @app.errorhandler(400)
     def bad_request(e):
