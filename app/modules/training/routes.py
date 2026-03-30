@@ -311,11 +311,8 @@ def training_chat():
 
     extra_context = build_training_context(g.user_id, session_id=session_id)
 
-    # Collect all chunks eagerly so both messages are persisted before streaming
-    chunks = list(stream_chat(g.user_id, 'training', message, extra_context=extra_context))
-
     def generate():
-        for chunk in chunks:
+        for chunk in stream_chat(g.user_id, 'training', message, extra_context=extra_context):
             yield f"data: {chunk}\n\n"
         yield "data: [DONE]\n\n"
 

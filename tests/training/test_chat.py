@@ -48,9 +48,10 @@ def test_training_chat_saves_conversation(client, app, db, mock_anthropic):
 
     user_id = user.id
     token = create_jwt(user_id, app.config['SECRET_KEY'])
-    client.post('/api/training/chat',
-                json={'message': 'How many sets should I do?'},
-                headers={'Authorization': f'Bearer {token}'})
+    resp = client.post('/api/training/chat',
+                       json={'message': 'How many sets should I do?'},
+                       headers={'Authorization': f'Bearer {token}'})
+    _ = resp.data  # force generator consumption so save_message('assistant') runs
 
     msgs = AIConversation.query.filter_by(user_id=user_id, module='training').all()
     assert len(msgs) == 2
