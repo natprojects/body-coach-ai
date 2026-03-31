@@ -220,13 +220,12 @@ def get_user_me():
 def patch_user_me():
     user = db.session.get(User, g.user_id)
     data = request.json or {}
-    from datetime import date as _date
     for k, v in data.items():
         if k not in _PROFILE_FIELDS:
             continue
         if k == 'last_period_date' and isinstance(v, str):
             try:
-                v = _date.fromisoformat(v)
+                v = date.fromisoformat(v)
             except ValueError:
                 continue
         setattr(user, k, v)
