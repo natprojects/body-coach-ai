@@ -1034,13 +1034,6 @@ const TRANSLATIONS = {
 function t(key) { return TRANSLATIONS[_lang]?.[key] ?? TRANSLATIONS.en[key] ?? key; }
 
 function applyTranslations() {
-  // Nav tab labels
-  const navMap = {train:'tab_train', program:'tab_program', nutrition:'tab_nutrition', sleep:'tab_sleep', coach:'tab_coach'};
-  document.querySelectorAll('.nav-tab').forEach(tab => {
-    const key = navMap[tab.dataset.tab];
-    const lbl = tab.querySelector('.nav-tab-label');
-    if (key && lbl) lbl.textContent = t(key);
-  });
   // Profile overlay title
   const profileTitle = document.querySelector('#overlay-profile .overlay-title');
   if (profileTitle) profileTitle.textContent = t('profile_title');

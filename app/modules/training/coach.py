@@ -175,13 +175,15 @@ def generate_exercise_insights(program, user) -> int:
         'day_of_week': we.workout.day_of_week,
     } for we in wes]
 
+    lang = getattr(user, 'app_language', None) or 'en'
+    lang_instruction = " Write all text fields in Ukrainian." if lang == 'uk' else ""
     system_prompt = (
         "You are an expert strength and conditioning coach. "
         "Return a JSON array only — no prose, no markdown fences. "
         "For each exercise explain why it was chosen for this specific user, "
         "what outcome to expect, and any modification made due to injuries/limitations. "
         "If no modification was needed, set modifications_applied to null. "
-        "Return exactly one object per input exercise, in the same order."
+        f"Return exactly one object per input exercise, in the same order.{lang_instruction}"
     )
 
     user_prompt = (
