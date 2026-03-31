@@ -69,6 +69,7 @@ class Exercise(db.Model):
     muscle_position = db.Column(db.String(20))  # stretched / shortened / mid
     is_corrective = db.Column(db.Boolean, default=False)
     is_prehab = db.Column(db.Boolean, default=False)
+    technique_text = db.Column(db.Text)
 
 
 class WorkoutExercise(db.Model):

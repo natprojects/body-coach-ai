@@ -500,9 +500,13 @@ def exercise_technique(exercise_id):
               .first())
         if we and we.notes:
             coaching_notes = we.notes
+    if ex.technique_text:
+        return jsonify({'success': True, 'data': {'technique': ex.technique_text}})
     user = db.session.get(User, g.user_id)
     from .coach import get_exercise_technique
     technique = get_exercise_technique(ex, user, coaching_notes)
+    ex.technique_text = technique
+    db.session.commit()
     return jsonify({'success': True, 'data': {'technique': technique}})
 
 
