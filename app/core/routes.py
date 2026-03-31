@@ -10,6 +10,11 @@ from app.extensions import db
 bp = Blueprint('core', __name__)
 
 
+@bp.route('/health', methods=['GET'])
+def health():
+    return jsonify({'status': 'ok'})
+
+
 @bp.route('/auth/validate', methods=['POST'])
 def auth_validate():
     body = request.json or {}
