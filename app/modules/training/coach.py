@@ -111,25 +111,32 @@ def _get_or_create_exercise(name: str) -> Exercise:
 
 def generate_program(user: User) -> dict:
     system_prompt = """You are an expert strength and conditioning coach.
-Generate a complete periodized training program as JSON only — no prose, no markdown, just valid JSON.
-Structure:
+Generate a periodized training program as JSON only — no prose, no markdown, just valid JSON.
+CRITICAL LIMITS to stay within token budget:
+- Maximum 2 mesocycles
+- Each mesocycle: maximum 2 weeks (representative weeks only)
+- Each workout: maximum 5 exercises
+- Each exercise: exactly 3 sets
+- All notes fields must be null (no text)
+
+Structure (follow exactly):
 {
   "name": "...",
-  "periodization_type": "linear|wave|block",
-  "total_weeks": N,
+  "periodization_type": "linear",
+  "total_weeks": 8,
   "mesocycles": [
     {
-      "name": "Accumulation|Intensification|Deload",
+      "name": "Accumulation",
       "order_index": 0,
-      "weeks_count": N,
+      "weeks_count": 4,
       "weeks": [
         {
           "week_number": 1,
-          "notes": "optional",
+          "notes": null,
           "workouts": [
             {
               "day_of_week": 0,
-              "name": "Upper Body A",
+              "name": "Upper A",
               "order_index": 0,
               "exercises": [
                 {
@@ -137,8 +144,9 @@ Structure:
                   "order_index": 0,
                   "notes": null,
                   "sets": [
-                    {"set_number": 1, "target_reps": "8-10",
-                     "target_weight_kg": 60.0, "target_rpe": 7.0, "rest_seconds": 120}
+                    {"set_number": 1, "target_reps": "8-10", "target_weight_kg": 60.0, "target_rpe": 7.0, "rest_seconds": 120},
+                    {"set_number": 2, "target_reps": "8-10", "target_weight_kg": 60.0, "target_rpe": 7.5, "rest_seconds": 120},
+                    {"set_number": 3, "target_reps": "8-10", "target_weight_kg": 60.0, "target_rpe": 8.0, "rest_seconds": 120}
                   ]
                 }
               ]
@@ -162,7 +170,7 @@ Structure:
 - Mobility issues: {user.mobility_issues}
 - Likes: {user.training_likes}, Dislikes: {user.training_dislikes}
 
-Ensure all exercises respect the user's injuries and mobility restrictions."""
+Return compact JSON only. Respect injuries/mobility. Max 2 mesocycles, 2 representative weeks each, 5 exercises/workout, 3 sets/exercise, all notes null."""
 
     result = complete(system_prompt, user_prompt, max_tokens=8192, model='claude-sonnet-4-6')
     # Strip markdown code fences that the model sometimes wraps around JSON
