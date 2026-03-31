@@ -145,7 +145,7 @@ def test_app_language_in_profile(client, app, db):
     resp = client.get('/api/users/me', headers=_auth_header(app, user.id))
     assert resp.status_code == 200
     data = resp.get_json()
-    assert 'app_language' in data['data']
+    assert data['data'].get('app_language') == 'en'
 
     # PATCH updates app_language
     resp2 = client.patch('/api/users/me',
