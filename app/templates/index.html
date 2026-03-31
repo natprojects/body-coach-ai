@@ -22,14 +22,14 @@
     /* ── SCREENS ── */
     .screen { position: fixed; inset: 0; display: flex; flex-direction: column;
       padding: env(safe-area-inset-top,0) 0 env(safe-area-inset-bottom,0);
-      opacity: 0; pointer-events: none; transition: opacity .2s ease; }
-    .screen.active { opacity: 1; pointer-events: auto; }
+      opacity: 0; pointer-events: none; visibility: hidden; transition: opacity .2s ease; }
+    .screen.active { opacity: 1; pointer-events: auto; visibility: visible; }
 
     /* ── OVERLAYS ── */
     .overlay { position: fixed; inset: 0; background: rgba(0,0,0,.7);
       display: flex; align-items: flex-end; opacity: 0; pointer-events: none;
-      transition: opacity .25s ease; z-index: 100; }
-    .overlay.open { opacity: 1; pointer-events: auto; }
+      visibility: hidden; transition: opacity .25s ease; z-index: 100; }
+    .overlay.open { opacity: 1; pointer-events: auto; visibility: visible; }
     .overlay-sheet { width: 100%; background: #111; border-radius: 14px 14px 0 0;
       padding: 16px 20px 32px; transform: translateY(30px);
       transition: transform .25s ease; max-height: 90dvh; overflow-y: auto; }
@@ -77,7 +77,9 @@
     .radio-group, .check-group { display: flex; flex-direction: column; gap: 8px; }
     .radio-opt, .check-opt { display: flex; align-items: center; gap: 10px;
       background: var(--card); border: 1px solid var(--border); border-radius: 4px;
-      padding: 11px 14px; cursor: pointer; transition: border-color .2s, background .2s; }
+      padding: 11px 14px; cursor: pointer; transition: border-color .2s, background .2s;
+      width: 100%; text-align: left; color: var(--text); font-family: 'DM Sans', sans-serif;
+      -webkit-appearance: none; appearance: none; }
     .radio-opt.sel, .check-opt.sel { border-color: var(--accent); background: var(--accent-dim); }
     .radio-opt span, .check-opt span { font-size: 14px; text-transform: capitalize; }
     .scale-row { display: flex; gap: 6px; }
@@ -908,13 +910,13 @@ function renderObStep() {
 function renderField(f, val) {
   if (f.type === 'radio') {
     const opts = f.opts.map(o =>
-      `<div class="radio-opt${val===o?' sel':''}" onclick="pickRadio(this,'${f.k}','${o}')"><span>${o.replace(/_/g,' ')}</span></div>`).join('');
+      `<button type="button" class="radio-opt${val===o?' sel':''}" onclick="pickRadio(this,'${f.k}','${o}')"><span>${o.replace(/_/g,' ')}</span></button>`).join('');
     return `<div class="field" data-key="${f.k}"><label>${f.label}</label><div class="radio-group">${opts}</div></div>`;
   }
   if (f.type === 'check') {
     const arr = Array.isArray(val) ? val : [];
     const opts = f.opts.map(o =>
-      `<div class="check-opt${arr.includes(o)?' sel':''}" onclick="pickCheck(this,'${f.k}','${o}')"><span>${o.replace(/_/g,' ')}</span></div>`).join('');
+      `<button type="button" class="check-opt${arr.includes(o)?' sel':''}" onclick="pickCheck(this,'${f.k}','${o}')"><span>${o.replace(/_/g,' ')}</span></button>`).join('');
     return `<div class="field" data-key="${f.k}"><label>${f.label}</label><div class="check-group">${opts}</div></div>`;
   }
   if (f.type === 'textarea') {
@@ -1009,7 +1011,7 @@ function getScale(id) { return parseInt(document.querySelector(`#${id}`).dataset
 
 function buildRadioGroup(id, opts, key) {
   document.getElementById(id).innerHTML = opts.map(o =>
-    `<div class="radio-opt" onclick="pickGroupRadio('${id}',this,'${key}')"><span>${o}</span></div>`).join('');
+    `<button type="button" class="radio-opt" onclick="pickGroupRadio('${id}',this,'${key}')"><span>${o}</span></button>`).join('');
 }
 function pickGroupRadio(id, el, key) {
   document.querySelectorAll(`#${id} .radio-opt`).forEach(e => e.classList.remove('sel'));
