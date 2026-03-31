@@ -327,3 +327,101 @@ def training_chat():
         yield "data: [DONE]\n\n"
 
     return Response(stream_with_context(generate()), mimetype='text/event-stream')
+
+
+def _serialize_program_full(program):
+    from datetime import date
+    from .models import WorkoutExercise, Workout, ProgramWeek
+    days_elapsed = (date.today() - program.created_at.date()).days
+    current_week = (days_elapsed // 7) + 1
+
+    total_wes = (WorkoutExercise.query
+                 .join(Workout).join(ProgramWeek).join(Mesocycle)
+                 .filter(Mesocycle.program_id == program.id).count())
+    filled_wes = (WorkoutExercise.query
+                  .join(Workout).join(ProgramWeek).join(Mesocycle)
+                  .filter(Mesocycle.program_id == program.id,
+                          WorkoutExercise.selection_reason.isnot(None)).count())
+    insights_generated = total_wes > 0 and filled_wes == total_wes
+
+    return {
+        'id': program.id,
+        'name': program.name,
+        'periodization_type': program.periodization_type,
+        'total_weeks': program.total_weeks,
+        'current_week': current_week,
+        'insights_generated': insights_generated,
+        'mesocycles': [{
+            'id': m.id,
+            'name': m.name,
+            'order_index': m.order_index,
+            'weeks_count': m.weeks_count,
+            'weeks': [{
+                'week_number': w.week_number,
+                'notes': w.notes,
+                'workouts': [{
+                    'id': wo.id,
+                    'name': wo.name,
+                    'day_of_week': wo.day_of_week,
+                    'order_index': wo.order_index,
+                    'exercises': [{
+                        'workout_exercise_id': we.id,
+                        'exercise_name': we.exercise.name,
+                        'order_index': we.order_index,
+                        'selection_reason': we.selection_reason,
+                        'expected_outcome': we.expected_outcome,
+                        'modifications_applied': we.modifications_applied,
+                        'sets': [{
+                            'set_number': ps.set_number,
+                            'target_reps': ps.target_reps,
+                            'target_weight_kg': ps.target_weight_kg,
+                            'target_rpe': ps.target_rpe,
+                            'rest_seconds': ps.rest_seconds,
+                        } for ps in we.planned_sets]
+                    } for we in wo.workout_exercises]
+                } for wo in w.workouts]
+            } for w in m.weeks]
+        } for m in program.mesocycles]
+    }
+
+
+@bp.route('/training/program/full', methods=['GET'])
+@require_auth
+def program_full():
+    program = Program.query.filter_by(user_id=g.user_id, status='active').first()
+    if not program:
+        return jsonify({'success': True, 'data': None})
+    return jsonify({'success': True, 'data': _serialize_program_full(program)})
+
+
+@bp.route('/training/program/insights', methods=['POST'])
+@require_auth
+def program_insights():
+    program = Program.query.filter_by(user_id=g.user_id, status='active').first()
+    if not program:
+        return jsonify({'success': False, 'error': {
+            'code': 'NOT_FOUND', 'message': 'No active program'
+        }}), 404
+
+    from .models import WorkoutExercise, Workout, ProgramWeek
+    total = (WorkoutExercise.query
+             .join(Workout).join(ProgramWeek).join(Mesocycle)
+             .filter(Mesocycle.program_id == program.id).count())
+    filled = (WorkoutExercise.query
+              .join(Workout).join(ProgramWeek).join(Mesocycle)
+              .filter(Mesocycle.program_id == program.id,
+                      WorkoutExercise.selection_reason.isnot(None)).count())
+
+    if total > 0 and filled == total:
+        return jsonify({'success': True, 'data': {'count': total, 'already_done': True}})
+
+    user = db.session.get(User, g.user_id)
+    from .coach import generate_exercise_insights
+    try:
+        count = generate_exercise_insights(program, user)
+    except Exception:
+        return jsonify({'success': False, 'error': {
+            'code': 'AI_ERROR', 'message': 'Failed to generate insights, please try again.'
+        }}), 500
+
+    return jsonify({'success': True, 'data': {'count': count, 'already_done': False}})
