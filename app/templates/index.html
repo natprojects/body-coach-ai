@@ -189,26 +189,80 @@
       font-weight: 600; color: var(--accent); }
     .session-exercises { flex: 1; overflow-y: auto; padding: 12px 16px; display: flex;
       flex-direction: column; gap: 10px; }
-    .ex-card { background: var(--card); border: 1px solid var(--border); border-radius: 4px;
-      overflow: hidden; }
+    .session-footer { padding: 12px 16px; flex-shrink: 0; }
+
+    /* ── EXERCISE CARD ── */
+    .ex-card { background: var(--card); border: 1px solid var(--border);
+      border-radius: 4px; overflow: hidden; }
     .ex-card-header { padding: 14px 16px 10px; }
-    .ex-name { font-family: 'Barlow Condensed', sans-serif; font-size: 18px;
+    .ex-name { font-family: 'Barlow Condensed', sans-serif; font-size: 20px;
       font-weight: 700; text-transform: uppercase; }
-    .ex-plan { font-size: 12px; color: var(--muted); margin-top: 2px; }
-    .ex-sets { padding: 0 16px 10px; display: flex; flex-direction: column; gap: 6px; }
-    .set-row { display: flex; align-items: center; gap: 10px; padding: 8px 10px;
+    .ex-meta-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
+    .ex-plan-tag { font-size: 12px; color: var(--muted); }
+    .ex-rec-tag { font-size: 12px; color: var(--accent); font-weight: 600; }
+    .ex-last-tag { font-size: 12px; color: #666; }
+
+    /* Logged sets */
+    .ex-sets { padding: 0 16px 8px; display: flex; flex-direction: column; gap: 5px; }
+    .set-row { display: flex; align-items: center; gap: 8px; padding: 7px 10px;
       background: #141414; border-radius: 3px; font-size: 13px; }
     .set-num { font-family: 'Barlow Condensed', sans-serif; font-weight: 700;
-      font-size: 14px; color: var(--muted); width: 20px; }
+      font-size: 13px; color: var(--muted); width: 18px; }
     .set-data { flex: 1; color: var(--text); }
-    .set-done { color: var(--accent); font-size: 14px; }
-    .ex-log-btn { margin: 0 16px 14px; padding: 10px;
-      background: rgba(0,85,255,.15); border: 1px dashed rgba(0,85,255,.4);
-      border-radius: 3px; color: var(--accent); font-family: 'Barlow Condensed', sans-serif;
-      font-size: 14px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase;
-      cursor: pointer; width: calc(100% - 32px); transition: background .15s; }
-    .ex-log-btn:active { background: var(--accent-dim); }
-    .session-footer { padding: 12px 16px; flex-shrink: 0; }
+    .set-done { color: var(--accent); font-size: 13px; }
+
+    /* Rest timer */
+    .ex-rest-block { margin: 0 16px 12px; background: #0a1a0a;
+      border: 1px solid #1a3a1a; border-radius: 4px; padding: 12px 14px; }
+    .rest-header { display: flex; align-items: center; gap: 10px; }
+    .rest-label { font-size: 11px; color: #4a8; text-transform: uppercase;
+      letter-spacing: .1em; font-weight: 600; }
+    .rest-countdown { font-family: 'Barlow Condensed', sans-serif; font-size: 28px;
+      font-weight: 700; color: #4a8; flex: 1; }
+    .rest-skip-btn { background: none; border: 1px solid #1a3a1a; border-radius: 3px;
+      color: #4a8; font-family: 'Barlow Condensed', sans-serif; font-size: 11px;
+      font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
+      padding: 5px 10px; cursor: pointer; }
+    .rest-skip-btn:active { border-color: #4a8; }
+    .rest-tip-text { font-size: 12px; color: #5a9; margin-top: 8px; line-height: 1.4; }
+
+    /* Inline input area */
+    .ex-input-area { padding: 0 16px 14px; }
+    .ex-set-label { font-family: 'Barlow Condensed', sans-serif; font-size: 12px;
+      font-weight: 700; letter-spacing: .1em; text-transform: uppercase;
+      color: var(--muted); margin-bottom: 10px; }
+    .ex-inputs-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; }
+    .ex-input-group { display: flex; flex-direction: column; gap: 4px; }
+    .ex-num-input { width: 100%; background: #141414; border: 1px solid var(--border);
+      border-radius: 3px; color: var(--text); font-family: 'Barlow Condensed', sans-serif;
+      font-size: 26px; font-weight: 700; padding: 10px 12px; outline: none;
+      transition: border-color .2s; text-align: center; }
+    .ex-num-input:focus { border-color: var(--accent); }
+    .ex-input-unit { font-size: 11px; color: var(--muted); text-align: center;
+      text-transform: uppercase; letter-spacing: .08em; }
+
+    /* RPE buttons */
+    .rpe-row { display: grid; grid-template-columns: repeat(4,1fr); gap: 6px; margin-bottom: 12px; }
+    .rpe-btn { padding: 9px 4px; background: #141414; border: 1px solid var(--border);
+      border-radius: 3px; color: var(--muted); font-family: 'Barlow Condensed', sans-serif;
+      font-size: 12px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase;
+      cursor: pointer; transition: all .15s; line-height: 1.2; }
+    .rpe-btn.sel { background: var(--accent-dim); border-color: var(--accent); color: #fff; }
+    .rpe-btn:active { border-color: var(--accent); }
+    .ex-log-submit { margin-top: 2px; padding: 12px; }
+    .ex-error { font-size: 12px; color: #ff5555; margin-top: 6px; min-height: 16px; }
+    .ex-done-msg { padding: 12px 16px; font-size: 13px; color: #44ff88; }
+    .ex-skipped-msg { padding: 12px 16px; font-size: 13px; color: var(--muted);
+      font-style: italic; }
+
+    /* Action buttons */
+    .ex-actions { display: flex; border-top: 1px solid var(--border); }
+    .ex-action-btn { flex: 1; padding: 10px 4px; background: none; border: none;
+      border-right: 1px solid var(--border); color: var(--muted);
+      font-family: 'Barlow Condensed', sans-serif; font-size: 12px; font-weight: 700;
+      letter-spacing: .06em; text-transform: uppercase; cursor: pointer; transition: color .15s; }
+    .ex-action-btn:last-child { border-right: none; }
+    .ex-action-btn:active { color: var(--accent); }
 
     /* ── MISC ── */
     .divider { height: 1px; background: var(--border); margin: 8px 0; }
@@ -517,6 +571,44 @@
   </div>
 </div>
 
+<!-- OVERLAY: SKIP EXERCISE -->
+<div id="overlay-skip" class="overlay" onclick="overlayBgClick(event,'overlay-skip')">
+  <div class="overlay-sheet">
+    <div class="overlay-handle"></div>
+    <div class="overlay-title">Пропустити вправу</div>
+    <div id="skip-ex-name" style="font-size:13px;color:var(--muted);margin-bottom:16px"></div>
+    <div class="field"><label>Причина</label>
+      <div class="radio-group" id="skip-reason-group"></div>
+    </div>
+    <div id="skip-msg" class="error-msg" style="margin-bottom:8px"></div>
+    <button class="btn btn-primary" onclick="submitSkipExercise()">ПРОПУСТИТИ</button>
+  </div>
+</div>
+
+<!-- OVERLAY: REPLACE EXERCISE -->
+<div id="overlay-replace" class="overlay" onclick="overlayBgClick(event,'overlay-replace')">
+  <div class="overlay-sheet">
+    <div class="overlay-handle"></div>
+    <div class="overlay-title">Замінити вправу</div>
+    <div id="replace-ex-name" style="font-size:13px;color:var(--muted);margin-bottom:16px"></div>
+    <div class="field"><label>Альтернативи</label>
+      <div class="radio-group" id="replace-alternatives"></div>
+    </div>
+    <div id="replace-msg" class="error-msg" style="margin-bottom:8px"></div>
+  </div>
+</div>
+
+<!-- OVERLAY: TECHNIQUE -->
+<div id="overlay-technique" class="overlay" onclick="overlayBgClick(event,'overlay-technique')">
+  <div class="overlay-sheet">
+    <div class="overlay-handle"></div>
+    <div class="overlay-title" id="technique-ex-name">Техніка</div>
+    <p id="technique-body" class="feedback-text" style="margin-top:4px">Завантаження...</p>
+    <div style="height:16px"></div>
+    <button class="btn btn-ghost" onclick="closeOverlay('overlay-technique')">ЗАКРИТИ</button>
+  </div>
+</div>
+
 <!-- OVERLAY: FEEDBACK -->
 <div id="overlay-feedback" class="overlay" onclick="overlayBgClick(event,'overlay-feedback')">
   <div class="overlay-sheet">
@@ -555,18 +647,21 @@ if (tg) { tg.ready(); tg.expand(); tg.setHeaderColor('#080808'); tg.setBackgroun
 const S = {
   jwt: localStorage.getItem('bca_jwt'),
   todayWorkout: null,
-  todayTargets: null,  // {exerciseId: {recommended_weight_kg, recommended_reps_min, recommended_reps_max, reason_text}}
+  todayTargets: null,  // {exerciseId: rec object}
   deloadNeeded: false,
   nextSessionPlan: [],
   sessionId: null,
-  sessionExercises: {}, // exerciseId -> [{set_number, reps, weight, rpe}]
+  sessionExercises: {}, // exerciseId -> [{reps, weight, rpe, rpeLabel}]
   sessionStartTime: null,
   timerInterval: null,
-  logsetTarget: null,  // {exerciseId, exerciseName, setNum, planInfo}
+  cardState: {},        // exerciseId -> {rpe, skipped, replacedWith}
+  restTimers: {},       // exerciseId -> {remaining, intervalId, tip}
   obSteps: [],
   obIndex: 0,
   obData: {},
 };
+
+const RPE_LABELS = {5: 'Легко', 7: 'Нормально', 8: 'Важко', 9: 'На межі'};
 
 // ── SCREEN/OVERLAY ──
 function showScreen(id) {
@@ -1331,6 +1426,8 @@ async function startWorkout() {
   if (!r.success) { alert('Could not start session'); return; }
   S.sessionId = r.data.session_id;
   S.sessionExercises = {};
+  S.cardState = {};
+  S.restTimers = {};
   S.sessionStartTime = Date.now();
   renderSession();
   showScreen('session');
@@ -1349,95 +1446,270 @@ function renderSession() {
 }
 
 function renderExerciseCard(ex) {
-  const logged = S.sessionExercises[ex.exercise_id] || [];
-  const planStr = ex.sets?.length
-    ? `${ex.sets.length} × ${ex.sets[0].target_reps || '?'} reps`
-      + (ex.sets[0].target_weight_kg ? ` @ ${ex.sets[0].target_weight_kg}kg` : '')
-      + (ex.sets[0].target_rpe ? ` RPE ${ex.sets[0].target_rpe}` : '')
-    : 'No plan';
-  const rec = S.todayTargets?.[ex.exercise_id];
-  const setsHTML = logged.map((s,i) => {
-    let feedbackHtml = '';
+  const eid = ex.exercise_id;
+  const logged = S.sessionExercises[eid] || [];
+  const rec = S.todayTargets?.[eid];
+  const restState = S.restTimers[eid];
+  const cardState = S.cardState[eid] || {};
+
+  // Header meta
+  const planStr = ex.sets?.length ? `${ex.sets.length} × ${ex.sets[0].target_reps || '?'}` : '';
+  const recStr = rec
+    ? [rec.recommended_weight_kg ? `${rec.recommended_weight_kg}kg` : '',
+       (rec.recommended_reps_min && rec.recommended_reps_max)
+         ? `${rec.recommended_reps_min}–${rec.recommended_reps_max} повт` : ''].filter(Boolean).join(' × ')
+    : '';
+  const lastStr = rec?.last?.weight_kg
+    ? `${rec.last.weight_kg}kg × ${rec.last.reps || '?'}`
+    : null;
+
+  // Logged sets
+  const setsHTML = logged.map((s, i) => {
+    let badge = '';
     if (i === logged.length - 1 && rec) {
       const repsAbove = rec.recommended_reps_max && s.reps > rec.recommended_reps_max;
-      const weightAbove = rec.recommended_weight_kg && s.weight > rec.recommended_weight_kg * 1.05;
+      const wAbove = rec.recommended_weight_kg && s.weight > rec.recommended_weight_kg * 1.05;
       const repsOk = !rec.recommended_reps_min || s.reps >= rec.recommended_reps_min;
-      const weightOk = !rec.recommended_weight_kg || s.weight >= rec.recommended_weight_kg * 0.9;
-      if (repsAbove || weightAbove) {
-        feedbackHtml = '<span class="set-feedback set-feedback-above">Above target 💪</span>';
-      } else if (repsOk && weightOk) {
-        feedbackHtml = '<span class="set-feedback set-feedback-ok">On track ✓</span>';
-      } else {
-        feedbackHtml = '<span class="set-feedback set-feedback-below">Below target</span>';
-      }
+      const wOk = !rec.recommended_weight_kg || s.weight >= rec.recommended_weight_kg * 0.9;
+      if (repsAbove || wAbove) badge = '<span class="set-feedback set-feedback-above">💪</span>';
+      else if (repsOk && wOk) badge = '<span class="set-feedback set-feedback-ok">✓</span>';
+      else badge = '<span class="set-feedback set-feedback-below">↓</span>';
     }
+    const rpeLabel = s.rpeLabel ? ` · ${s.rpeLabel}` : '';
     return `<div class="set-row">
       <span class="set-num">${i+1}</span>
-      <span class="set-data">${s.reps} reps × ${s.weight}kg${s.rpe ? ' @ RPE '+s.rpe : ''}</span>
-      <span class="set-done">✓</span>
-      ${feedbackHtml}
+      <span class="set-data">${s.weight}kg × ${s.reps}${rpeLabel}</span>
+      <span class="set-done">✓</span>${badge}
     </div>`;
   }).join('');
-  const nextSet = logged.length + 1;
-  const planSet = ex.sets?.[logged.length];
-  return `<div class="ex-card" id="ex-${ex.exercise_id}">
+
+  // Body: rest timer / inputs / done / skipped
+  const totalSets = ex.sets?.length || 3;
+  let bodyHtml;
+
+  if (cardState.skipped) {
+    bodyHtml = `<div class="ex-skipped-msg">✗ Пропущено</div>`;
+  } else if (restState) {
+    const m = Math.floor(restState.remaining / 60);
+    const sec = String(restState.remaining % 60).padStart(2, '0');
+    const tip = restState.tip ? `<div class="rest-tip-text">💡 ${_esc(restState.tip)}</div>` : '';
+    bodyHtml = `<div class="ex-rest-block">
+      <div class="rest-header">
+        <span class="rest-label">Відпочинок</span>
+        <span class="rest-countdown" id="rc-${eid}">${m}:${sec}</span>
+        <button class="rest-skip-btn" onclick="skipRest(${eid})">Пропустити</button>
+      </div>${tip}
+    </div>`;
+  } else if (logged.length >= totalSets) {
+    bodyHtml = `<div class="ex-done-msg">✓ Всі підходи виконано</div>`;
+  } else {
+    const setNum = logged.length + 1;
+    const defaultW = rec?.recommended_weight_kg || ex.sets?.[logged.length]?.target_weight_kg || '';
+    const selRpe = cardState.rpe;
+    const rpeBtns = [{l:'Легко',v:5},{l:'Нормально',v:7},{l:'Важко',v:8},{l:'На межі',v:9}]
+      .map(({l,v}) => `<button class="rpe-btn${selRpe===v?' sel':''}" onclick="setRPE(${eid},${v},this)">${l}</button>`)
+      .join('');
+    bodyHtml = `<div class="ex-input-area">
+      <div class="ex-set-label">Підхід ${setNum}</div>
+      <div class="ex-inputs-row">
+        <div class="ex-input-group">
+          <input type="number" id="w-${eid}" class="ex-num-input" value="${defaultW}" placeholder="0" step="0.5" min="0" inputmode="decimal">
+          <span class="ex-input-unit">кг</span>
+        </div>
+        <div class="ex-input-group">
+          <input type="number" id="r-${eid}" class="ex-num-input" placeholder="0" min="1" inputmode="numeric">
+          <span class="ex-input-unit">повт</span>
+        </div>
+      </div>
+      <div class="rpe-row">${rpeBtns}</div>
+      <button class="btn btn-primary ex-log-submit" onclick="logSetInline(${eid})">ЗАПИСАТИ ПІДХІД</button>
+      <div class="ex-error" id="err-${eid}"></div>
+    </div>`;
+  }
+
+  const safeName = ex.exercise_name.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+  return `<div class="ex-card" id="ex-${eid}">
     <div class="ex-card-header">
-      <div class="ex-name">${ex.exercise_name}</div>
-      <div class="ex-plan">${planStr}</div>
+      <div class="ex-name">${_esc(ex.exercise_name)}</div>
+      <div class="ex-meta-row">
+        ${planStr ? `<span class="ex-plan-tag">${planStr}</span>` : ''}
+        ${recStr ? `<span class="ex-rec-tag">▲ ${_esc(recStr)}</span>` : ''}
+        ${lastStr ? `<span class="ex-last-tag">↩ ${_esc(lastStr)}</span>` : ''}
+      </div>
     </div>
     ${setsHTML ? `<div class="ex-sets">${setsHTML}</div>` : ''}
-    <button class="ex-log-btn" onclick="openLogSet(${ex.exercise_id},'${ex.exercise_name.replace(/'/g,"\\'")}',${nextSet},${JSON.stringify(JSON.stringify(planSet||null))})">+ LOG SET ${nextSet}</button>
+    ${bodyHtml}
+    <div class="ex-actions">
+      <button class="ex-action-btn" onclick="openSkipExercise(${eid},'${safeName}')">Пропустити</button>
+      <button class="ex-action-btn" onclick="openReplaceExercise(${eid},'${safeName}')">Замінити</button>
+      <button class="ex-action-btn" onclick="openTechnique(${eid},'${safeName}')">Техніка</button>
+    </div>
   </div>`;
 }
 
-function openLogSet(exerciseId, exerciseName, setNum, planJSON) {
-  const plan = planJSON ? JSON.parse(planJSON) : null;
-  S.logsetTarget = {exerciseId, exerciseName, setNum, plan};
-  document.getElementById('logset-title').textContent = `${exerciseName} — SET ${setNum}`;
-  const info = document.querySelector('#logset-plan-info span');
-  info.textContent = plan
-    ? `Target: ${plan.target_reps||'?'} reps${plan.target_weight_kg?' × '+plan.target_weight_kg+'kg':''}`
-      + `${plan.target_rpe?' @ RPE '+plan.target_rpe:''}`
-    : '';
-  const recWeight = S.todayTargets?.[exerciseId]?.recommended_weight_kg;
-  document.getElementById('logset-reps').value = '';
-  document.getElementById('logset-weight').value = recWeight || plan?.target_weight_kg || '';
-  clearScale('scale-logset-rpe');
-  document.getElementById('logset-msg').textContent = '';
-  haptic();
-  openOverlay('overlay-logset');
+function setRPE(exerciseId, value, btn) {
+  if (!S.cardState[exerciseId]) S.cardState[exerciseId] = {};
+  S.cardState[exerciseId].rpe = value;
+  btn.closest('.rpe-row').querySelectorAll('.rpe-btn').forEach(b => b.classList.remove('sel'));
+  btn.classList.add('sel');
+  haptic('light');
 }
 
-async function submitLogSet() {
-  const t = S.logsetTarget;
-  const reps = parseInt(document.getElementById('logset-reps').value);
-  const weight = parseFloat(document.getElementById('logset-weight').value) || 0;
-  const rpe = getScale('scale-logset-rpe');
-  if (!reps) { document.getElementById('logset-msg').innerHTML = '<div class="error-msg">Enter reps</div>'; return; }
+async function logSetInline(exerciseId) {
+  const weightEl = document.getElementById('w-' + exerciseId);
+  const repsEl = document.getElementById('r-' + exerciseId);
+  const errEl = document.getElementById('err-' + exerciseId);
+  const weight = parseFloat(weightEl?.value) || 0;
+  const reps = parseInt(repsEl?.value);
+  const rpe = S.cardState[exerciseId]?.rpe || null;
+
+  if (!reps || reps < 1) {
+    if (errEl) errEl.textContent = 'Введи кількість повторів';
+    return;
+  }
+  if (errEl) errEl.textContent = '';
+
+  const logged = S.sessionExercises[exerciseId] || [];
+  const setNum = logged.length + 1;
 
   const r = await api('POST', '/api/training/session/log-set', {
     session_id: S.sessionId,
-    exercise_id: t.exerciseId,
-    set_number: t.setNum,
+    exercise_id: exerciseId,
+    set_number: setNum,
     actual_reps: reps,
     actual_weight_kg: weight,
     actual_rpe: rpe,
   });
-  if (!r.success) { document.getElementById('logset-msg').innerHTML = '<div class="error-msg">Error saving</div>'; return; }
+  if (!r.success) {
+    if (errEl) errEl.textContent = 'Помилка збереження';
+    return;
+  }
 
-  if (!S.sessionExercises[t.exerciseId]) S.sessionExercises[t.exerciseId] = [];
-  S.sessionExercises[t.exerciseId].push({reps, weight, rpe});
+  if (!S.sessionExercises[exerciseId]) S.sessionExercises[exerciseId] = [];
+  S.sessionExercises[exerciseId].push({reps, weight, rpe, rpeLabel: RPE_LABELS[rpe] || null});
+  if (S.cardState[exerciseId]) S.cardState[exerciseId].rpe = null;
 
-  closeOverlay('overlay-logset');
   haptic('medium');
 
-  // Re-render just this exercise card
-  const w = S.todayWorkout;
-  const ex = w?.exercises?.find(e => e.exercise_id === t.exerciseId);
-  if (ex) {
-    const card = document.getElementById('ex-'+t.exerciseId);
-    if (card) card.outerHTML = renderExerciseCard(ex);
+  const ex = S.todayWorkout?.exercises?.find(e => e.exercise_id === exerciseId);
+  const totalSets = ex?.sets?.length || 3;
+
+  if (logged.length + 1 < totalSets) {
+    const restSecs = ex?.sets?.[0]?.rest_seconds || 90;
+    const tip = ex?.coaching_notes || ex?.selection_reason || null;
+    startRestTimer(exerciseId, restSecs, tip);
   }
+
+  const card = document.getElementById('ex-' + exerciseId);
+  if (card && ex) card.outerHTML = renderExerciseCard(ex);
+}
+
+function startRestTimer(exerciseId, seconds, tip) {
+  if (S.restTimers[exerciseId]) clearInterval(S.restTimers[exerciseId].intervalId);
+  S.restTimers[exerciseId] = {remaining: seconds, intervalId: null, tip};
+
+  const tick = () => {
+    const rt = S.restTimers[exerciseId];
+    if (!rt) return;
+    const countEl = document.getElementById('rc-' + exerciseId);
+    if (countEl) {
+      const m = Math.floor(rt.remaining / 60);
+      const s = String(rt.remaining % 60).padStart(2, '0');
+      countEl.textContent = m + ':' + s;
+    }
+    if (rt.remaining <= 0) {
+      clearInterval(rt.intervalId);
+      delete S.restTimers[exerciseId];
+      const ex = S.todayWorkout?.exercises?.find(e => e.exercise_id === exerciseId);
+      if (ex) { const card = document.getElementById('ex-' + exerciseId); if (card) card.outerHTML = renderExerciseCard(ex); }
+      haptic('light');
+      return;
+    }
+    rt.remaining--;
+  };
+
+  S.restTimers[exerciseId].intervalId = setInterval(tick, 1000);
+  tick();
+}
+
+function skipRest(exerciseId) {
+  if (S.restTimers[exerciseId]) {
+    clearInterval(S.restTimers[exerciseId].intervalId);
+    delete S.restTimers[exerciseId];
+  }
+  const ex = S.todayWorkout?.exercises?.find(e => e.exercise_id === exerciseId);
+  if (ex) { const card = document.getElementById('ex-' + exerciseId); if (card) card.outerHTML = renderExerciseCard(ex); }
+}
+
+// ── Skip / Replace / Technique ──
+
+function openSkipExercise(exerciseId, exName) {
+  S._skipTarget = {exerciseId, exName};
+  document.getElementById('skip-ex-name').textContent = exName;
+  document.getElementById('skip-reason-group').innerHTML = [
+    {id:'busy', label:'Зайнятий тренажер'},
+    {id:'pain', label:'Біль або дискомфорт'},
+    {id:'energy', label:'Немає сил'},
+    {id:'other', label:'Інше'},
+  ].map(r => `<button class="radio-opt" data-reason="${r.id}" onclick="this.closest('.radio-group').querySelectorAll('.radio-opt').forEach(b=>b.classList.remove('sel'));this.classList.add('sel')"><span>${r.label}</span></button>`).join('');
+  document.getElementById('skip-msg').textContent = '';
+  haptic(); openOverlay('overlay-skip');
+}
+
+async function submitSkipExercise() {
+  const sel = document.querySelector('#skip-reason-group .radio-opt.sel');
+  if (!sel) { document.getElementById('skip-msg').textContent = 'Оберіть причину'; return; }
+  const {exerciseId, exName} = S._skipTarget;
+  await api('POST', '/api/training/session/skip-exercise', {
+    session_id: S.sessionId, exercise_id: exerciseId, exercise_name: exName, reason: sel.dataset.reason,
+  });
+  if (!S.cardState[exerciseId]) S.cardState[exerciseId] = {};
+  S.cardState[exerciseId].skipped = true;
+  closeOverlay('overlay-skip'); haptic('medium');
+  const ex = S.todayWorkout?.exercises?.find(e => e.exercise_id === exerciseId);
+  if (ex) { const card = document.getElementById('ex-' + exerciseId); if (card) card.outerHTML = renderExerciseCard(ex); }
+}
+
+function openReplaceExercise(exerciseId, exName) {
+  S._replaceTarget = {exerciseId, exName};
+  document.getElementById('replace-ex-name').textContent = exName;
+  const listEl = document.getElementById('replace-alternatives');
+  listEl.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:16px 0">Завантаження...</div>';
+  document.getElementById('replace-msg').textContent = '';
+  haptic(); openOverlay('overlay-replace');
+  api('GET', `/api/training/exercise/${exerciseId}/alternatives`).then(r => {
+    if (!r.success || !r.data?.alternatives?.length) {
+      listEl.innerHTML = '<div style="color:var(--muted);font-size:13px">Альтернативи не знайдено</div>';
+      return;
+    }
+    listEl.innerHTML = r.data.alternatives.map(a => {
+      const safeN = (a.exercise_name || '').replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+      return `<button class="radio-opt" onclick="selectAlternative(${a.exercise_id||'null'},'${safeN}')"><span>${_esc(a.exercise_name)}</span></button>`;
+    }).join('');
+  });
+}
+
+function selectAlternative(newExerciseId, newName) {
+  const {exerciseId} = S._replaceTarget;
+  if (!S.cardState[exerciseId]) S.cardState[exerciseId] = {};
+  S.cardState[exerciseId].replacedWith = {newExerciseId, newName};
+  closeOverlay('overlay-replace'); haptic('heavy');
+  // Update display name in card header
+  const nameEl = document.querySelector(`#ex-${exerciseId} .ex-name`);
+  if (nameEl) nameEl.textContent = newName;
+}
+
+function openTechnique(exerciseId, exName) {
+  document.getElementById('technique-ex-name').textContent = exName;
+  const body = document.getElementById('technique-body');
+  body.textContent = 'Завантаження...';
+  body.style.color = 'var(--muted)';
+  haptic(); openOverlay('overlay-technique');
+  api('GET', `/api/training/exercise/${exerciseId}/technique`).then(r => {
+    body.style.color = '#ccc';
+    body.style.whiteSpace = 'pre-wrap';
+    body.textContent = r.success ? r.data.technique : 'Не вдалося завантажити';
+  });
 }
 
 async function completeWorkout() {
@@ -1498,7 +1770,11 @@ function startTimer() {
     if (el) el.textContent = m + ':' + String(s).padStart(2,'0');
   }, 1000);
 }
-function stopTimer() { clearInterval(S.timerInterval); }
+function stopTimer() {
+  clearInterval(S.timerInterval);
+  Object.values(S.restTimers).forEach(rt => clearInterval(rt.intervalId));
+  S.restTimers = {};
+}
 
 // ── CHECK-IN ──
 function openCheckin() {

@@ -268,3 +268,45 @@ def generate_exercise_insights(program, user) -> int:
 
     db.session.commit()
     return len(insights)
+
+
+def suggest_exercise_alternatives(exercise, user) -> list:
+    """AI suggests 2-3 alternative exercises for the same muscle group."""
+    lang = getattr(user, 'app_language', 'en') or 'en'
+    lang_note = 'Respond in Ukrainian.' if lang == 'uk' else 'Respond in English.'
+    prompt = (
+        f"User wants alternatives to: {exercise.name} (muscle group: {exercise.muscle_group})\n"
+        f"User equipment: {getattr(user, 'equipment', 'gym')}\n"
+        f"User injuries: {getattr(user, 'injuries_current', 'none')}\n\n"
+        f"List exactly 3 safe alternative exercises for the same muscle group.\n"
+        f"Respond with ONLY a JSON array, no markdown: "
+        f'[{{"exercise_name": "..."}}]\n{lang_note}'
+    )
+    try:
+        text = complete('You are an exercise selection expert.', prompt, max_tokens=150,
+                        model='claude-haiku-4-5-20251001')
+        text = text.strip()
+        alts = json.loads(text)
+        return [{'exercise_id': None, 'exercise_name': a['exercise_name']} for a in alts[:3]]
+    except Exception:
+        return [{'exercise_id': None, 'exercise_name': f'{exercise.muscle_group} alternative'}]
+
+
+def get_exercise_technique(exercise, user, coaching_notes=None) -> str:
+    """AI generates technique tips + common mistakes for an exercise."""
+    lang = getattr(user, 'app_language', 'en') or 'en'
+    lang_note = 'Respond in Ukrainian.' if lang == 'uk' else 'Respond in English.'
+    extra = f'\nCoach note: {coaching_notes}' if coaching_notes else ''
+    prompt = (
+        f"Exercise: {exercise.name}{extra}\n\n"
+        f"Write a concise technique guide with 2 sections:\n"
+        f"1. Key technique points (3 bullet points, max 12 words each)\n"
+        f"2. Common mistakes (2 bullet points, max 12 words each)\n\n"
+        f"{lang_note}"
+    )
+    try:
+        return complete('You are a professional strength coach.', prompt, max_tokens=300,
+                        model='claude-haiku-4-5-20251001')
+    except Exception:
+        return 'Could not load technique info. Please try again.'
+

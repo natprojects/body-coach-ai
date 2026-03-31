@@ -176,6 +176,10 @@ def _serialize_workout_with_sets(workout: Workout) -> dict:
             'exercise_id': we.exercise_id,
             'exercise_name': we.exercise.name,
             'order_index': we.order_index,
+            'coaching_notes': we.notes,
+            'selection_reason': we.selection_reason,
+            'tempo': we.tempo,
+            'muscle_group': we.exercise.muscle_group,
             'sets': [{
                 'set_number': ps.set_number,
                 'target_reps': ps.target_reps,
@@ -444,6 +448,62 @@ def program_insights():
         }}), 500
 
     return jsonify({'success': True, 'data': {'count': count, 'already_done': False}})
+
+
+@bp.route('/training/session/skip-exercise', methods=['POST'])
+@require_auth
+def session_skip_exercise():
+    data = request.json or {}
+    session = WorkoutSession.query.filter_by(id=data.get('session_id'), user_id=g.user_id).first()
+    if not session:
+        return jsonify({'success': False, 'error': {'code': 'NOT_FOUND', 'message': 'Session not found'}}), 404
+    reason = data.get('reason', 'skipped')
+    note = f"Skipped {data.get('exercise_name', data.get('exercise_id', ''))}: {reason}"
+    session.notes = ((session.notes or '') + '\n' + note).strip()
+    db.session.commit()
+    return jsonify({'success': True})
+
+
+@bp.route('/training/exercise/<int:exercise_id>/alternatives', methods=['GET'])
+@require_auth
+def exercise_alternatives(exercise_id):
+    from .models import Exercise
+    ex = db.session.get(Exercise, exercise_id)
+    if not ex:
+        return jsonify({'success': False, 'error': {'code': 'NOT_FOUND', 'message': 'Exercise not found'}}), 404
+    alts = (Exercise.query
+            .filter(Exercise.muscle_group == ex.muscle_group, Exercise.id != exercise_id)
+            .limit(4).all())
+    if len(alts) >= 2:
+        return jsonify({'success': True, 'data': {'alternatives': [
+            {'exercise_id': a.id, 'exercise_name': a.name} for a in alts[:3]
+        ]}})
+    user = db.session.get(User, g.user_id)
+    from .coach import suggest_exercise_alternatives
+    alts_list = suggest_exercise_alternatives(ex, user)
+    return jsonify({'success': True, 'data': {'alternatives': alts_list}})
+
+
+@bp.route('/training/exercise/<int:exercise_id>/technique', methods=['GET'])
+@require_auth
+def exercise_technique(exercise_id):
+    from .models import Exercise, WorkoutExercise, Workout, ProgramWeek
+    ex = db.session.get(Exercise, exercise_id)
+    if not ex:
+        return jsonify({'success': False, 'error': {'code': 'NOT_FOUND', 'message': 'Exercise not found'}}), 404
+    program = Program.query.filter_by(user_id=g.user_id, status='active').first()
+    coaching_notes = None
+    if program:
+        we = (WorkoutExercise.query
+              .join(Workout).join(ProgramWeek).join(Mesocycle)
+              .filter(Mesocycle.program_id == program.id, WorkoutExercise.exercise_id == exercise_id)
+              .first())
+        if we and we.notes:
+            coaching_notes = we.notes
+    user = db.session.get(User, g.user_id)
+    from .coach import get_exercise_technique
+    technique = get_exercise_technique(ex, user, coaching_notes)
+    return jsonify({'success': True, 'data': {'technique': technique}})
 
 
 @bp.route('/training/recommendations/today', methods=['GET'])
