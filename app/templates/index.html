@@ -303,6 +303,47 @@
     .prog-insight-body.open { display: block; }
     .prog-mod-badge { color: #ffaa44; font-size: 11px; }
     #program-content.insights-hidden .prog-insight { display: none; }
+
+    /* ── DELOAD BANNER ── */
+    .deload-banner { background: rgba(255,170,0,0.1); border: 1px solid rgba(255,170,0,0.3);
+      border-radius: 4px; padding: 12px 16px; flex-shrink: 0; }
+    .deload-banner-title { font-family: 'Barlow Condensed', sans-serif; font-size: 13px;
+      font-weight: 700; color: #ffaa00; text-transform: uppercase; letter-spacing: .08em; }
+    .deload-banner-body { font-size: 12px; color: #cc8800; margin-top: 3px; line-height: 1.4; }
+
+    /* ── TARGETS SECTION ── */
+    .targets-section { background: var(--card); border: 1px solid var(--border);
+      border-radius: 4px; padding: 16px; flex-shrink: 0; }
+    .targets-title { font-family: 'Barlow Condensed', sans-serif; font-size: 13px;
+      font-weight: 700; text-transform: uppercase; letter-spacing: .1em;
+      color: var(--accent); margin-bottom: 12px; }
+    .target-row { padding: 8px 0; border-bottom: 1px solid var(--border);
+      display: flex; flex-direction: column; gap: 3px; }
+    .target-row:last-child { border-bottom: none; }
+    .target-ex-name { font-family: 'Barlow Condensed', sans-serif; font-size: 14px;
+      font-weight: 700; text-transform: uppercase; }
+    .target-values { font-size: 12px; color: var(--muted); }
+    .target-reason { font-size: 11px; color: #888; font-style: italic; }
+
+    /* ── INLINE SET FEEDBACK ── */
+    .set-feedback { font-size: 11px; font-weight: 600; letter-spacing: .04em;
+      padding: 2px 7px; border-radius: 2px; white-space: nowrap; }
+    .set-feedback-ok { color: #44ff88; background: rgba(68,255,136,0.1); }
+    .set-feedback-above { color: #55aaff; background: rgba(0,85,255,0.15); }
+    .set-feedback-below { color: #ffaa44; background: rgba(255,170,68,0.1); }
+
+    /* ── NEXT SESSION PLAN ── */
+    .next-plan-section { margin-top: 20px; }
+    .next-plan-title { font-family: 'Barlow Condensed', sans-serif; font-size: 14px;
+      font-weight: 700; text-transform: uppercase; letter-spacing: .1em;
+      color: var(--accent); margin-bottom: 12px; }
+    .next-plan-row { padding: 8px 0; border-bottom: 1px solid var(--border);
+      display: flex; flex-direction: column; gap: 3px; }
+    .next-plan-row:last-child { border-bottom: none; }
+    .next-plan-ex { font-family: 'Barlow Condensed', sans-serif; font-size: 14px;
+      font-weight: 700; text-transform: uppercase; }
+    .next-plan-target { font-size: 12px; color: var(--muted); }
+    .next-plan-reason { font-size: 11px; color: #888; font-style: italic; }
   </style>
 </head>
 <body>
@@ -482,6 +523,7 @@
     <div class="overlay-handle"></div>
     <div class="overlay-title">Workout Complete</div>
     <p id="feedback-text" class="feedback-text">Generating feedback...</p>
+    <div id="next-session-plan" class="next-plan-section"></div>
     <div style="height:16px"></div>
     <button class="btn btn-primary" onclick="closeOverlay('overlay-feedback')">DONE</button>
   </div>
@@ -513,6 +555,9 @@ if (tg) { tg.ready(); tg.expand(); tg.setHeaderColor('#080808'); tg.setBackgroun
 const S = {
   jwt: localStorage.getItem('bca_jwt'),
   todayWorkout: null,
+  todayTargets: null,  // {exerciseId: {recommended_weight_kg, recommended_reps_min, recommended_reps_max, reason_text}}
+  deloadNeeded: false,
+  nextSessionPlan: [],
   sessionId: null,
   sessionExercises: {}, // exerciseId -> [{set_number, reps, weight, rpe}]
   sessionStartTime: null,
@@ -691,11 +736,18 @@ function setLoading(msg) {
 // ── MAIN ──
 async function loadMain() {
   setLoading('Loading workout...');
-  const [r, userR] = await Promise.all([
+  const [r, userR, recR] = await Promise.all([
     api('GET', '/api/training/today'),
     api('GET', '/api/users/me'),
+    api('GET', '/api/training/recommendations/today'),
   ]);
   S.todayWorkout = r.success ? r.data : null;
+  if (recR.success) {
+    S.deloadNeeded = recR.data.deload_needed || false;
+    const targets = {};
+    (recR.data.recommendations || []).forEach(rec => { targets[rec.exercise_id] = rec; });
+    S.todayTargets = targets;
+  }
   if (userR.success && userR.data.app_language) {
     _lang = userR.data.app_language;
   }
@@ -732,7 +784,16 @@ function renderTrainTab() {
   const setCount = w.exercises?.reduce((s,e) => s + (e.sets?.length||0), 0) || 0;
   const estMin = Math.round(setCount * 2.5 + exCount * 2);
 
-  el.innerHTML = `
+  const deloadBanner = S.deloadNeeded
+    ? `<div class="deload-banner">
+        <div class="deload-banner-title">⚠ Deload Recommended</div>
+        <div class="deload-banner-body">Your body is showing signs of fatigue. Consider reducing weight by 40–50% this week.</div>
+      </div>`
+    : '';
+
+  const targetsHtml = renderTargetsSection();
+
+  el.innerHTML = deloadBanner + `
     <div class="hero-card">
       <div class="hero-label">${t('today_training')}</div>
       <div class="hero-title">${w.name || 'WORKOUT'}</div>
@@ -742,7 +803,35 @@ function renderTrainTab() {
         <div class="stat"><span class="stat-value">${estMin}</span><span class="stat-label">${t('est_min')}</span></div>
       </div>
       <button class="btn btn-primary" onclick="startWorkout()">${t('start_workout')}</button>
+    </div>` + targetsHtml;
+}
+
+function renderTargetsSection() {
+  const targets = S.todayTargets;
+  const w = S.todayWorkout;
+  if (!targets || !w?.exercises?.length) return '';
+
+  const rows = w.exercises.map(ex => {
+    const rec = targets[ex.exercise_id];
+    if (!rec) return '';
+    const weightStr = rec.recommended_weight_kg ? `${rec.recommended_weight_kg}kg` : '';
+    const repsStr = (rec.recommended_reps_min && rec.recommended_reps_max)
+      ? `${rec.recommended_reps_min}–${rec.recommended_reps_max} reps`
+      : (rec.recommended_reps_min ? `${rec.recommended_reps_min}+ reps` : '');
+    const targetStr = [weightStr, repsStr].filter(Boolean).join(' × ');
+    if (!targetStr) return '';
+    return `<div class="target-row">
+      <div class="target-ex-name">${_esc(ex.exercise_name)}</div>
+      <div class="target-values">${_esc(targetStr)}</div>
+      ${rec.reason_text ? `<div class="target-reason">${_esc(rec.reason_text)}</div>` : ''}
     </div>`;
+  }).filter(Boolean).join('');
+
+  if (!rows) return '';
+  return `<div class="targets-section">
+    <div class="targets-title">Today's Targets</div>
+    ${rows}
+  </div>`;
 }
 
 async function generateProgram() {
@@ -1266,12 +1355,29 @@ function renderExerciseCard(ex) {
       + (ex.sets[0].target_weight_kg ? ` @ ${ex.sets[0].target_weight_kg}kg` : '')
       + (ex.sets[0].target_rpe ? ` RPE ${ex.sets[0].target_rpe}` : '')
     : 'No plan';
-  const setsHTML = logged.map((s,i) =>
-    `<div class="set-row">
+  const rec = S.todayTargets?.[ex.exercise_id];
+  const setsHTML = logged.map((s,i) => {
+    let feedbackHtml = '';
+    if (i === logged.length - 1 && rec) {
+      const repsAbove = rec.recommended_reps_max && s.reps > rec.recommended_reps_max;
+      const weightAbove = rec.recommended_weight_kg && s.weight > rec.recommended_weight_kg * 1.05;
+      const repsOk = !rec.recommended_reps_min || s.reps >= rec.recommended_reps_min;
+      const weightOk = !rec.recommended_weight_kg || s.weight >= rec.recommended_weight_kg * 0.9;
+      if (repsAbove || weightAbove) {
+        feedbackHtml = '<span class="set-feedback set-feedback-above">Above target 💪</span>';
+      } else if (repsOk && weightOk) {
+        feedbackHtml = '<span class="set-feedback set-feedback-ok">On track ✓</span>';
+      } else {
+        feedbackHtml = '<span class="set-feedback set-feedback-below">Below target</span>';
+      }
+    }
+    return `<div class="set-row">
       <span class="set-num">${i+1}</span>
       <span class="set-data">${s.reps} reps × ${s.weight}kg${s.rpe ? ' @ RPE '+s.rpe : ''}</span>
       <span class="set-done">✓</span>
-    </div>`).join('');
+      ${feedbackHtml}
+    </div>`;
+  }).join('');
   const nextSet = logged.length + 1;
   const planSet = ex.sets?.[logged.length];
   return `<div class="ex-card" id="ex-${ex.exercise_id}">
@@ -1293,8 +1399,9 @@ function openLogSet(exerciseId, exerciseName, setNum, planJSON) {
     ? `Target: ${plan.target_reps||'?'} reps${plan.target_weight_kg?' × '+plan.target_weight_kg+'kg':''}`
       + `${plan.target_rpe?' @ RPE '+plan.target_rpe:''}`
     : '';
+  const recWeight = S.todayTargets?.[exerciseId]?.recommended_weight_kg;
   document.getElementById('logset-reps').value = '';
-  document.getElementById('logset-weight').value = plan?.target_weight_kg || '';
+  document.getElementById('logset-weight').value = recWeight || plan?.target_weight_kg || '';
   clearScale('scale-logset-rpe');
   document.getElementById('logset-msg').textContent = '';
   haptic();
@@ -1338,10 +1445,40 @@ async function completeWorkout() {
   stopTimer();
   const r = await api('POST', '/api/training/session/complete', {session_id: S.sessionId});
   showScreen('main');
-  if (r.success && r.data?.feedback) {
-    document.getElementById('feedback-text').textContent = r.data.feedback;
-    openOverlay('overlay-feedback');
+  if (r.success) {
+    if (r.data?.next_session_plan?.length) {
+      S.nextSessionPlan = r.data.next_session_plan;
+      // Refresh targets for next visit
+      const targets = {};
+      r.data.next_session_plan.forEach(rec => { targets[rec.exercise_id] = rec; });
+      S.todayTargets = targets;
+    }
+    if (r.data?.feedback) {
+      document.getElementById('feedback-text').textContent = r.data.feedback;
+      renderNextSessionPlan();
+      openOverlay('overlay-feedback');
+    }
   }
+}
+
+function renderNextSessionPlan() {
+  const el = document.getElementById('next-session-plan');
+  if (!el) return;
+  const plan = S.nextSessionPlan;
+  if (!plan?.length) { el.innerHTML = ''; return; }
+  const rows = plan.map(rec => {
+    const weightStr = rec.recommended_weight_kg ? `${rec.recommended_weight_kg}kg` : '';
+    const repsStr = (rec.recommended_reps_min && rec.recommended_reps_max)
+      ? `${rec.recommended_reps_min}–${rec.recommended_reps_max} reps`
+      : (rec.recommended_reps_min ? `${rec.recommended_reps_min}+ reps` : '');
+    const targetStr = [weightStr, repsStr].filter(Boolean).join(' × ');
+    return `<div class="next-plan-row">
+      <div class="next-plan-ex">${_esc(rec.exercise_name)}</div>
+      ${targetStr ? `<div class="next-plan-target">${_esc(targetStr)}</div>` : ''}
+      ${rec.reason_text ? `<div class="next-plan-reason">${_esc(rec.reason_text)}</div>` : ''}
+    </div>`;
+  }).join('');
+  el.innerHTML = `<div class="next-plan-title">Next Session Plan</div>${rows}`;
 }
 
 function confirmLeaveSession() {
