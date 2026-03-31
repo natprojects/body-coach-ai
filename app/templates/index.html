@@ -687,6 +687,11 @@ async function generateProgram() {
 let _profileData = null;
 let _profileEditMode = false;
 
+function _esc(s) {
+  if (s === null || s === undefined) return '';
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
 async function openProfile() {
   haptic();
   openOverlay('overlay-profile');
@@ -755,7 +760,7 @@ function renderProfileView() {
       ${s.rows.map(([label, val]) => `
         <div class="profile-row">
           <span class="profile-row-label">${label}</span>
-          <span class="profile-row-value">${val ?? '—'}</span>
+          <span class="profile-row-value">${val !== null && val !== undefined ? _esc(String(val)) : '—'}</span>
         </div>`).join('')}
     </div>`).join('');
 }
@@ -792,8 +797,8 @@ function toggleProfileEdit() {
         <div class="profile-row" style="flex-direction:column;align-items:stretch;gap:6px">
           <span class="profile-row-label">${label}</span>
           ${type === 'textarea'
-            ? `<textarea data-field="${key}">${val}</textarea>`
-            : `<input type="${type}" data-field="${key}" value="${val}">`
+            ? `<textarea data-field="${key}">${_esc(val)}</textarea>`
+            : `<input type="${type}" data-field="${key}" value="${_esc(val)}">`
           }
         </div>`).join('')}
     </div>`).join('');
@@ -821,7 +826,11 @@ async function saveProfile() {
   msg.innerHTML = '<div style="color:var(--muted);font-size:13px;text-align:center">Saving...</div>';
   const r = await api('PATCH', '/api/users/me', patch);
   if (!r.success) {
-    msg.innerHTML = `<div class="error-msg">${r.error?.message || 'Save failed'}</div>`;
+    const errDiv = document.createElement('div');
+    errDiv.className = 'error-msg';
+    errDiv.textContent = r.error?.message || 'Save failed';
+    msg.innerHTML = '';
+    msg.appendChild(errDiv);
     return;
   }
   _profileData = r.data;
