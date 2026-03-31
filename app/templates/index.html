@@ -239,6 +239,55 @@
       cursor: pointer; font-size: 16px; transition: border-color .2s; flex-shrink: 0; }
     #profile-icon:active { border-color: var(--accent); }
     .profile-edit-bar { display: flex; gap: 10px; margin-top: 20px; }
+
+    /* ── PROGRAM TAB ── */
+    .prog-header { flex-shrink: 0; }
+    .prog-title { font-family: 'Barlow Condensed', sans-serif; font-size: 22px;
+      font-weight: 800; text-transform: uppercase; margin-bottom: 4px; }
+    .prog-meta { font-size: 12px; color: var(--muted); margin-bottom: 16px; }
+    .prog-insights-btn { margin-bottom: 16px; }
+    .insights-ready { font-size: 13px; color: #44ff88; letter-spacing: .06em;
+      text-transform: uppercase; padding: 10px 0; }
+    .meso-block { background: var(--card); border: 1px solid var(--border);
+      border-radius: 4px; margin-bottom: 10px; overflow: hidden; flex-shrink: 0; }
+    .meso-header { padding: 14px 16px; cursor: pointer; display: flex;
+      justify-content: space-between; align-items: center; }
+    .meso-name { font-family: 'Barlow Condensed', sans-serif; font-size: 16px;
+      font-weight: 700; text-transform: uppercase; letter-spacing: .08em; }
+    .meso-chevron { font-size: 12px; color: var(--muted); transition: transform .2s; }
+    .meso-body { padding: 0 12px 12px; display: none; }
+    .meso-block.open .meso-body { display: block; }
+    .meso-block.open .meso-chevron { transform: rotate(180deg); }
+    .week-block { margin-bottom: 8px; border: 1px solid var(--border); border-radius: 3px;
+      overflow: hidden; }
+    .week-block.current-week { border-color: var(--accent);
+      box-shadow: 0 0 8px var(--accent-glow); }
+    .week-header { padding: 10px 12px; cursor: pointer; display: flex;
+      justify-content: space-between; align-items: center; background: #141414; }
+    .week-label { font-family: 'Barlow Condensed', sans-serif; font-size: 14px;
+      font-weight: 700; text-transform: uppercase; letter-spacing: .06em; }
+    .week-current-badge { font-size: 10px; color: var(--accent); letter-spacing: .1em;
+      text-transform: uppercase; }
+    .week-body { display: none; padding: 8px; }
+    .week-block.open .week-body { display: block; }
+    .day-block { margin-bottom: 6px; }
+    .day-header { font-family: 'Barlow Condensed', sans-serif; font-size: 13px;
+      font-weight: 700; text-transform: uppercase; letter-spacing: .1em;
+      color: var(--accent); padding: 6px 4px 4px; }
+    .prog-ex-row { padding: 8px 4px; border-bottom: 1px solid var(--border); }
+    .prog-ex-row:last-child { border-bottom: none; }
+    .prog-ex-name { font-family: 'Barlow Condensed', sans-serif; font-size: 15px;
+      font-weight: 700; text-transform: uppercase; }
+    .prog-ex-sets { font-size: 12px; color: var(--muted); margin-top: 2px; margin-bottom: 4px; }
+    .prog-insight { margin-top: 6px; }
+    .prog-insight-toggle { background: none; border: none; color: var(--muted);
+      font-size: 12px; cursor: pointer; padding: 3px 0; display: flex;
+      align-items: center; gap: 4px; text-align: left; }
+    .prog-insight-toggle:active { color: var(--accent); }
+    .prog-insight-body { font-size: 13px; color: #aaa; line-height: 1.5;
+      padding: 6px 0 2px; display: none; }
+    .prog-insight-body.open { display: block; }
+    .prog-mod-badge { color: #ffaa44; font-size: 11px; }
   </style>
 </head>
 <body>
@@ -318,6 +367,9 @@
         </div>
       </div>
     </div>
+    <div class="tab-panel" id="panel-program">
+      <div id="program-content"><!-- dynamic --></div>
+    </div>
     <div class="tab-panel" id="panel-nutrition">
       <div class="coming-soon"><div class="cs-line"></div><div class="cs-text">Nutrition</div><div class="cs-line"></div></div>
     </div>
@@ -330,6 +382,7 @@
   </div>
   <nav class="bottom-nav">
     <button class="nav-tab active" data-tab="train" onclick="switchTab('train')"><span class="nav-tab-label">Train</span></button>
+    <button class="nav-tab" data-tab="program" onclick="switchTab('program')"><span class="nav-tab-label">Program</span></button>
     <button class="nav-tab" data-tab="nutrition" onclick="switchTab('nutrition')"><span class="nav-tab-label">Nutrition</span></button>
     <button class="nav-tab" data-tab="sleep" onclick="switchTab('sleep')"><span class="nav-tab-label">Sleep</span></button>
     <button class="nav-tab" data-tab="coach" onclick="switchTab('coach')"><span class="nav-tab-label">Coach</span></button>
@@ -844,6 +897,139 @@ async function saveProfile() {
   renderProfileView();
 }
 
+// ── PROGRAM TAB ──
+let _programData = null;
+
+async function loadProgramTab() {
+  const el = document.getElementById('program-content');
+  el.innerHTML = '<div style="color:var(--muted);font-size:13px;text-align:center;padding:40px">Loading...</div>';
+  const r = await api('GET', '/api/training/program/full');
+  if (!r.success) {
+    el.innerHTML = '<div class="error-msg">Failed to load program</div>';
+    return;
+  }
+  _programData = r.data;
+  renderProgramTab();
+}
+
+const DAY_NAMES = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+
+function renderProgramTab() {
+  const el = document.getElementById('program-content');
+  const p = _programData;
+
+  if (!p) {
+    el.innerHTML = `
+      <div class="no-program-card">
+        <div class="np-title">No Program Yet</div>
+        <div class="np-body">Generate your personalized training program first.</div>
+        <button class="btn btn-primary" onclick="generateProgram()">GENERATE PROGRAM</button>
+      </div>`;
+    return;
+  }
+
+  const insightsBtn = p.insights_generated
+    ? `<div class="insights-ready">✓ Exercise Insights Ready</div>`
+    : `<div class="prog-insights-btn">
+        <button class="btn btn-ghost" id="insights-btn" onclick="generateInsights()">
+          GENERATE EXERCISE INSIGHTS
+        </button>
+      </div>`;
+
+  const mesosHtml = p.mesocycles.map(m => `
+    <div class="meso-block open">
+      <div class="meso-header" onclick="toggleMeso(this)">
+        <span class="meso-name">${m.name}</span>
+        <span class="meso-chevron">▲</span>
+      </div>
+      <div class="meso-body">
+        ${m.weeks.map(w => {
+          const isCurrent = w.week_number === p.current_week;
+          return `
+          <div class="week-block ${isCurrent ? 'open current-week' : ''}">
+            <div class="week-header" onclick="toggleWeek(this)">
+              <span class="week-label">Week ${w.week_number}</span>
+              ${isCurrent ? '<span class="week-current-badge">● CURRENT</span>' : '<span></span>'}
+            </div>
+            <div class="week-body">
+              ${w.workouts.map(wo => `
+                <div class="day-block">
+                  <div class="day-header">${DAY_NAMES[wo.day_of_week]} — ${wo.name}</div>
+                  ${wo.exercises.map(ex => {
+                    const setsStr = ex.sets.length > 0
+                      ? `${ex.sets.length}×${ex.sets[0].target_reps} @${ex.sets[0].target_weight_kg}kg RPE${ex.sets[0].target_rpe}`
+                      : '';
+                    const insightHtml = p.insights_generated ? `
+                      <div class="prog-insight">
+                        <button type="button" class="prog-insight-toggle"
+                          onclick="toggleInsight(this)"><span class="insight-arrow">▶</span> Why this exercise</button>
+                        <div class="prog-insight-body">${ex.selection_reason || '—'}</div>
+                      </div>
+                      <div class="prog-insight">
+                        <button type="button" class="prog-insight-toggle"
+                          onclick="toggleInsight(this)"><span class="insight-arrow">▶</span> Expected outcome</button>
+                        <div class="prog-insight-body">${ex.expected_outcome || '—'}</div>
+                      </div>
+                      ${ex.modifications_applied ? `
+                      <div class="prog-insight">
+                        <button type="button" class="prog-insight-toggle"
+                          onclick="toggleInsight(this)"><span class="insight-arrow">▶</span> <span class="prog-mod-badge">⚠ Modification</span></button>
+                        <div class="prog-insight-body">${ex.modifications_applied}</div>
+                      </div>` : ''}` : '';
+                    return `
+                    <div class="prog-ex-row">
+                      <div class="prog-ex-name">${ex.exercise_name}</div>
+                      <div class="prog-ex-sets">${setsStr}</div>
+                      ${insightHtml}
+                    </div>`;
+                  }).join('')}
+                </div>`).join('')}
+            </div>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>`).join('');
+
+  el.innerHTML = `
+    <div class="prog-header">
+      <div class="prog-title">${p.name}</div>
+      <div class="prog-meta">${p.total_weeks} weeks · ${p.periodization_type}</div>
+      ${insightsBtn}
+    </div>
+    ${mesosHtml}`;
+}
+
+function toggleMeso(header) {
+  header.closest('.meso-block').classList.toggle('open');
+}
+
+function toggleWeek(header) {
+  header.closest('.week-block').classList.toggle('open');
+}
+
+function toggleInsight(btn) {
+  const body = btn.nextElementSibling;
+  const isOpen = body.classList.toggle('open');
+  const arrow = btn.querySelector('.insight-arrow');
+  if (arrow) arrow.textContent = isOpen ? '▼' : '▶';
+}
+
+async function generateInsights() {
+  const btn = document.getElementById('insights-btn');
+  if (!btn) return;
+  btn.textContent = 'GENERATING INSIGHTS...';
+  btn.disabled = true;
+  haptic('medium');
+  const r = await api('POST', '/api/training/program/insights', null, 120000);
+  if (r.success) {
+    haptic('heavy');
+    await loadProgramTab();
+  } else {
+    btn.textContent = 'TRY AGAIN';
+    btn.disabled = false;
+  }
+}
+
 // ── TAB SWITCH ──
 function switchTab(name) {
   document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
@@ -851,6 +1037,7 @@ function switchTab(name) {
   document.querySelector(`[data-tab="${name}"]`).classList.add('active');
   document.getElementById(`panel-${name}`).classList.add('active');
   haptic();
+  if (name === 'program') loadProgramTab();
 }
 
 // ── SESSION ──
