@@ -139,3 +139,20 @@ class LoggedSet(db.Model):
     actual_rpe = db.Column(db.Float)
     notes = db.Column(db.Text)
     logged_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+
+class ExerciseRecommendation(db.Model):
+    __tablename__ = 'exercise_recommendations'
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    exercise_id = db.Column(db.Integer, db.ForeignKey('exercises.id'), nullable=False)
+    session_id = db.Column(db.Integer, db.ForeignKey('workout_sessions.id'), nullable=True)
+    recommended_weight_kg = db.Column(db.Float)
+    recommended_reps_min = db.Column(db.Integer)
+    recommended_reps_max = db.Column(db.Integer)
+    recommendation_type = db.Column(db.String(30), nullable=False)
+    reason_text = db.Column(db.Text)
+    is_applied = db.Column(db.Boolean, default=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    exercise = db.relationship('Exercise')
