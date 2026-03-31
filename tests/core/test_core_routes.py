@@ -134,3 +134,22 @@ def test_patch_user_me_ignores_protected_fields(client, app, db):
 def test_get_user_me_requires_auth(client):
     resp = client.get('/api/users/me')
     assert resp.status_code == 401
+
+
+def test_app_language_in_profile(client, app, db):
+    from app.core.models import User
+    user = User(telegram_id=50001, name='LangTest')
+    db.session.add(user)
+    db.session.commit()
+    # GET returns app_language
+    resp = client.get('/api/users/me', headers=_auth_header(app, user.id))
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert 'app_language' in data['data']
+
+    # PATCH updates app_language
+    resp2 = client.patch('/api/users/me',
+                         json={'app_language': 'uk'},
+                         headers=_auth_header(app, user.id))
+    assert resp2.status_code == 200
+    assert resp2.get_json()['data']['app_language'] == 'uk'

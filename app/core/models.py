@@ -31,6 +31,7 @@ class User(db.Model):
     previous_methods = db.Column(db.JSON)
     had_coach_before = db.Column(db.Boolean)
     motivation_type = db.Column(db.String(20))
+    app_language = db.Column(db.String(10), default='en')
     username = db.Column(db.String(100), unique=True, nullable=True)
     password_hash = db.Column(db.String(256), nullable=True)
     onboarding_completed_at = db.Column(db.DateTime)

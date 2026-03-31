@@ -196,7 +196,7 @@ _PROFILE_FIELDS = {
     'postural_issues', 'mobility_issues', 'muscle_imbalances',
     'menstrual_tracking', 'cycle_length_days', 'last_period_date',
     'training_likes', 'training_dislikes', 'previous_methods',
-    'had_coach_before', 'motivation_type',
+    'had_coach_before', 'motivation_type', 'app_language',
 }
 
 
