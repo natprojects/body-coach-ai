@@ -187,49 +187,49 @@
       font-weight: 800; text-transform: uppercase; flex: 1; }
     .session-timer { font-family: 'Barlow Condensed', sans-serif; font-size: 16px;
       font-weight: 600; color: var(--accent); }
-    .session-exercises { flex: 1; overflow-y: auto; padding: 12px 16px; display: flex;
-      flex-direction: column; gap: 10px; }
-    .session-footer { padding: 12px 16px; flex-shrink: 0; }
+    .session-exercises { flex: 1; overflow-y: auto; padding: 8px 12px; display: flex;
+      flex-direction: column; gap: 8px; }
+    .session-footer { padding: 8px 12px; flex-shrink: 0; }
 
     /* ── EXERCISE CARD ── */
     .ex-card { background: var(--card); border: 1px solid var(--border);
       border-radius: 4px; overflow: hidden; }
-    .ex-card-header { padding: 14px 16px 10px; }
-    .ex-name { font-family: 'Barlow Condensed', sans-serif; font-size: 20px;
+    .ex-card-header { padding: 10px 12px 7px; }
+    .ex-name { font-family: 'Barlow Condensed', sans-serif; font-size: 17px;
       font-weight: 700; text-transform: uppercase; }
-    .ex-meta-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
-    .ex-plan-tag { font-size: 12px; color: var(--muted); }
-    .ex-rec-tag { font-size: 12px; color: var(--accent); font-weight: 600; }
-    .ex-last-tag { font-size: 12px; color: #666; }
+    .ex-meta-row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+    .ex-plan-tag { font-size: 11px; color: var(--muted); }
+    .ex-rec-tag { font-size: 11px; color: var(--accent); font-weight: 600; }
+    .ex-last-tag { font-size: 11px; color: #666; }
 
     /* Logged sets */
-    .ex-sets { padding: 0 16px 8px; display: flex; flex-direction: column; gap: 5px; }
-    .set-row { display: flex; align-items: center; gap: 8px; padding: 7px 10px;
-      background: #141414; border-radius: 3px; font-size: 13px; }
+    .ex-sets { padding: 0 12px 6px; display: flex; flex-direction: column; gap: 4px; }
+    .set-row { display: flex; align-items: center; gap: 8px; padding: 5px 8px;
+      background: #141414; border-radius: 3px; font-size: 12px; }
     .set-num { font-family: 'Barlow Condensed', sans-serif; font-weight: 700;
-      font-size: 13px; color: var(--muted); width: 18px; }
+      font-size: 12px; color: var(--muted); width: 16px; }
     .set-data { flex: 1; color: var(--text); }
-    .set-done { color: var(--accent); font-size: 13px; }
+    .set-done { color: var(--accent); font-size: 12px; }
 
     /* Rest timer */
-    .ex-rest-block { margin: 0 16px 12px; background: #0a1a0a;
-      border: 1px solid #1a3a1a; border-radius: 4px; padding: 12px 14px; }
+    .ex-rest-block { margin: 0 12px 8px; background: #0a1a0a;
+      border: 1px solid #1a3a1a; border-radius: 4px; padding: 9px 12px; }
     .rest-header { display: flex; align-items: center; gap: 10px; }
     .rest-label { font-size: 11px; color: #4a8; text-transform: uppercase;
       letter-spacing: .1em; font-weight: 600; }
-    .rest-countdown { font-family: 'Barlow Condensed', sans-serif; font-size: 28px;
+    .rest-countdown { font-family: 'Barlow Condensed', sans-serif; font-size: 24px;
       font-weight: 700; color: #4a8; flex: 1; }
     .rest-skip-btn { background: none; border: 1px solid #1a3a1a; border-radius: 3px;
       color: #4a8; font-family: 'Barlow Condensed', sans-serif; font-size: 11px;
       font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
-      padding: 5px 10px; cursor: pointer; }
+      padding: 4px 8px; cursor: pointer; }
     .rest-skip-btn:active { border-color: #4a8; }
-    .rest-tip-text { font-size: 12px; color: #5a9; margin-top: 8px; line-height: 1.4; }
+    .rest-tip-text { font-size: 11px; color: #5a9; margin-top: 6px; line-height: 1.4; }
 
     /* Log set button */
-    .ex-log-btn { display: block; width: 100%; padding: 12px 16px; background: none;
+    .ex-log-btn { display: block; width: 100%; padding: 9px 12px; background: none;
       border: none; border-top: 1px solid var(--border); color: var(--accent);
-      font-family: 'Barlow Condensed', sans-serif; font-size: 14px; font-weight: 700;
+      font-family: 'Barlow Condensed', sans-serif; font-size: 13px; font-weight: 700;
       letter-spacing: .1em; text-transform: uppercase; cursor: pointer;
       text-align: center; transition: background .15s; }
     .ex-log-btn:active { background: var(--accent-dim); }
@@ -242,15 +242,15 @@
       cursor: pointer; transition: all .15s; line-height: 1.2; }
     .rpe-btn.sel { background: var(--accent-dim); border-color: var(--accent); color: #fff; }
     .rpe-btn:active { border-color: var(--accent); }
-    .ex-done-msg { padding: 12px 16px; font-size: 13px; color: #44ff88; }
-    .ex-skipped-msg { padding: 12px 16px; font-size: 13px; color: var(--muted);
+    .ex-done-msg { padding: 8px 12px; font-size: 12px; color: #44ff88; }
+    .ex-skipped-msg { padding: 8px 12px; font-size: 12px; color: var(--muted);
       font-style: italic; }
 
     /* Action buttons */
     .ex-actions { display: flex; border-top: 1px solid var(--border); }
-    .ex-action-btn { flex: 1; padding: 10px 4px; background: none; border: none;
+    .ex-action-btn { flex: 1; padding: 7px 4px; background: none; border: none;
       border-right: 1px solid var(--border); color: var(--muted);
-      font-family: 'Barlow Condensed', sans-serif; font-size: 12px; font-weight: 700;
+      font-family: 'Barlow Condensed', sans-serif; font-size: 11px; font-weight: 700;
       letter-spacing: .06em; text-transform: uppercase; cursor: pointer; transition: color .15s; }
     .ex-action-btn:last-child { border-right: none; }
     .ex-action-btn:active { color: var(--accent); }
