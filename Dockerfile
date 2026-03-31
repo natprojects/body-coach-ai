@@ -13,4 +13,4 @@ ENV DATABASE_URL=sqlite:////app/data/body_coach.db
 
 EXPOSE 8000
 
-CMD ["gunicorn", "run:app", "--bind", "0.0.0.0:8000", "--workers", "2", "--timeout", "180"]
+CMD ["gunicorn", "run:app", "--bind", "0.0.0.0:8000", "--workers", "2", "--timeout", "600"]

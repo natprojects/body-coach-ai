@@ -75,10 +75,10 @@ def stream_chat(user_id: int, module: str, user_message: str, extra_context: str
     save_message(user_id, module, 'assistant', ''.join(full_response))
 
 
-def complete(system_prompt: str, user_message: str, max_tokens: int = 4096) -> str:
+def complete(system_prompt: str, user_message: str, max_tokens: int = 4096, model: str = None) -> str:
     """Non-streaming completion for structured outputs (program gen, reports)."""
     response = get_client().messages.create(
-        model=current_app.config['AI_MODEL'],
+        model=model or current_app.config['AI_MODEL'],
         max_tokens=max_tokens,
         system=system_prompt,
         messages=[{"role": "user", "content": user_message}],

@@ -629,7 +629,7 @@ async function generateProgram() {
   const btn = document.querySelector('#train-content .btn');
   btn.textContent = 'GENERATING...';
   btn.disabled = true;
-  const r = await api('POST', '/api/training/program/generate', null, 120000);
+  const r = await api('POST', '/api/training/program/generate', null, 600000);
   if (r.success) {
     await loadMain();
   } else {
