@@ -251,9 +251,22 @@ def session_complete():
     session.ai_feedback = feedback
     db.session.commit()
 
+    from .progress import analyze_session_and_recommend
+    recs = analyze_session_and_recommend(session.id, g.user_id)
+    rec_data = [{
+        'exercise_id': r.exercise_id,
+        'exercise_name': r.exercise.name,
+        'recommended_weight_kg': r.recommended_weight_kg,
+        'recommended_reps_min': r.recommended_reps_min,
+        'recommended_reps_max': r.recommended_reps_max,
+        'recommendation_type': r.recommendation_type,
+        'reason_text': r.reason_text,
+    } for r in recs]
+
     return jsonify({'success': True, 'data': {
         'session_id': session.id,
         'feedback': feedback,
+        'next_session_plan': rec_data,
     }})
 
 
@@ -431,3 +444,103 @@ def program_insights():
         }}), 500
 
     return jsonify({'success': True, 'data': {'count': count, 'already_done': False}})
+
+
+@bp.route('/training/recommendations/today', methods=['GET'])
+@require_auth
+def recommendations_today():
+    from datetime import date
+    from .models import ExerciseRecommendation, LoggedExercise
+    from .progress import check_deload_needed
+
+    program = Program.query.filter_by(user_id=g.user_id, status='active').first()
+    if not program:
+        return jsonify({'success': True, 'data': {'recommendations': [], 'deload_needed': False}})
+
+    today_dow = date.today().weekday()
+    days_elapsed = (date.today() - program.created_at.date()).days
+    current_week_num = min((days_elapsed // 7) + 1, program.total_weeks)
+
+    week = (ProgramWeek.query
+            .join(Mesocycle)
+            .filter(Mesocycle.program_id == program.id,
+                    ProgramWeek.week_number == current_week_num)
+            .first())
+    if not week:
+        return jsonify({'success': True, 'data': {'recommendations': [], 'deload_needed': False}})
+
+    workout = Workout.query.filter_by(program_week_id=week.id, day_of_week=today_dow).first()
+    if not workout:
+        return jsonify({'success': True, 'data': {'recommendations': [], 'deload_needed': False}})
+
+    recs = []
+    for we in workout.workout_exercises:
+        # Latest recommendation for this exercise
+        rec = (ExerciseRecommendation.query
+               .filter_by(user_id=g.user_id, exercise_id=we.exercise_id)
+               .order_by(ExerciseRecommendation.created_at.desc())
+               .first())
+
+        # Last logged session for this exercise
+        last_le = (LoggedExercise.query
+                   .join(WorkoutSession)
+                   .filter(
+                       LoggedExercise.exercise_id == we.exercise_id,
+                       WorkoutSession.user_id == g.user_id,
+                       WorkoutSession.status == 'completed',
+                   )
+                   .order_by(WorkoutSession.date.desc())
+                   .first())
+
+        last_data = None
+        if last_le and last_le.logged_sets:
+            s = last_le.logged_sets[0]
+            total_reps = sum(ls.actual_reps or 0 for ls in last_le.logged_sets)
+            last_data = {
+                'weight_kg': s.actual_weight_kg,
+                'reps': total_reps // len(last_le.logged_sets) if last_le.logged_sets else s.actual_reps,
+                'rpe': sum(ls.actual_rpe or 0 for ls in last_le.logged_sets) / len(last_le.logged_sets),
+            }
+
+        if rec:
+            recs.append({
+                'exercise_id': we.exercise_id,
+                'exercise_name': we.exercise.name,
+                'order_index': we.order_index,
+                'last': last_data,
+                'recommended_weight_kg': rec.recommended_weight_kg,
+                'recommended_reps_min': rec.recommended_reps_min,
+                'recommended_reps_max': rec.recommended_reps_max,
+                'recommendation_type': rec.recommendation_type,
+                'reason_text': rec.reason_text,
+            })
+        else:
+            # No history — show planned targets
+            ps = we.planned_sets[0] if we.planned_sets else None
+            reps_str = ps.target_reps if ps else None
+            reps_min = reps_max = None
+            if reps_str:
+                parts = str(reps_str).split('-')
+                try:
+                    reps_min = int(parts[0])
+                    reps_max = int(parts[-1])
+                except (ValueError, IndexError):
+                    pass
+            recs.append({
+                'exercise_id': we.exercise_id,
+                'exercise_name': we.exercise.name,
+                'order_index': we.order_index,
+                'last': None,
+                'recommended_weight_kg': ps.target_weight_kg if ps else None,
+                'recommended_reps_min': reps_min,
+                'recommended_reps_max': reps_max,
+                'recommendation_type': 'planned',
+                'reason_text': 'First session — use planned targets.',
+            })
+
+    deload_needed = check_deload_needed(g.user_id)
+
+    return jsonify({'success': True, 'data': {
+        'recommendations': recs,
+        'deload_needed': deload_needed,
+    }})
