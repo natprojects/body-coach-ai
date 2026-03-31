@@ -22,4 +22,3 @@ jobs:
             docker compose up -d --build
             sleep 5
             docker compose exec -T gym-coach flask db upgrade
-            docker compose exec -T gym-coach python scripts/regen_insights.py
