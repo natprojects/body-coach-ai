@@ -420,10 +420,10 @@ function closeOverlay(id) { document.getElementById(id).classList.remove('open')
 function overlayBgClick(e, id) { if (e.target.id === id) closeOverlay(id); }
 
 // ── API ──
-async function api(method, path, body) {
+async function api(method, path, body, timeout=12000) {
   try {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 12000);
+    const timer = setTimeout(() => controller.abort(), timeout);
     const r = await fetch(path, {
       method,
       headers: {
@@ -626,14 +626,15 @@ function renderTrainTab() {
 }
 
 async function generateProgram() {
-  document.querySelector('#train-content .btn').textContent = 'GENERATING...';
-  document.querySelector('#train-content .btn').disabled = true;
-  const r = await api('POST', '/api/training/program/generate');
+  const btn = document.querySelector('#train-content .btn');
+  btn.textContent = 'GENERATING...';
+  btn.disabled = true;
+  const r = await api('POST', '/api/training/program/generate', null, 120000);
   if (r.success) {
     await loadMain();
   } else {
-    document.querySelector('#train-content .btn').textContent = 'TRY AGAIN';
-    document.querySelector('#train-content .btn').disabled = false;
+    btn.textContent = 'TRY AGAIN';
+    btn.disabled = false;
   }
 }
 
