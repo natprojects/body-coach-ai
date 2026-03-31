@@ -17,7 +17,8 @@ jobs:
           password: ${{ secrets.HETZNER_PASS }}
           script: |
             cd /srv/gym-coach
-            git pull origin main
+            git fetch origin main
+            git reset --hard origin/main
             docker compose up -d --build
             sleep 5
             docker compose exec -T gym-coach flask db upgrade
