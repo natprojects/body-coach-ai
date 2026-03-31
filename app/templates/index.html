@@ -226,22 +226,15 @@
     .rest-skip-btn:active { border-color: #4a8; }
     .rest-tip-text { font-size: 12px; color: #5a9; margin-top: 8px; line-height: 1.4; }
 
-    /* Inline input area */
-    .ex-input-area { padding: 0 16px 14px; }
-    .ex-set-label { font-family: 'Barlow Condensed', sans-serif; font-size: 12px;
-      font-weight: 700; letter-spacing: .1em; text-transform: uppercase;
-      color: var(--muted); margin-bottom: 10px; }
-    .ex-inputs-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; }
-    .ex-input-group { display: flex; flex-direction: column; gap: 4px; }
-    .ex-num-input { width: 100%; background: #141414; border: 1px solid var(--border);
-      border-radius: 3px; color: var(--text); font-family: 'Barlow Condensed', sans-serif;
-      font-size: 26px; font-weight: 700; padding: 10px 12px; outline: none;
-      transition: border-color .2s; text-align: center; }
-    .ex-num-input:focus { border-color: var(--accent); }
-    .ex-input-unit { font-size: 11px; color: var(--muted); text-align: center;
-      text-transform: uppercase; letter-spacing: .08em; }
+    /* Log set button */
+    .ex-log-btn { display: block; width: 100%; padding: 12px 16px; background: none;
+      border: none; border-top: 1px solid var(--border); color: var(--accent);
+      font-family: 'Barlow Condensed', sans-serif; font-size: 14px; font-weight: 700;
+      letter-spacing: .1em; text-transform: uppercase; cursor: pointer;
+      text-align: center; transition: background .15s; }
+    .ex-log-btn:active { background: var(--accent-dim); }
 
-    /* RPE buttons */
+    /* RPE buttons (used in overlay) */
     .rpe-row { display: grid; grid-template-columns: repeat(4,1fr); gap: 6px; margin-bottom: 12px; }
     .rpe-btn { padding: 9px 4px; background: #141414; border: 1px solid var(--border);
       border-radius: 3px; color: var(--muted); font-family: 'Barlow Condensed', sans-serif;
@@ -249,8 +242,6 @@
       cursor: pointer; transition: all .15s; line-height: 1.2; }
     .rpe-btn.sel { background: var(--accent-dim); border-color: var(--accent); color: #fff; }
     .rpe-btn:active { border-color: var(--accent); }
-    .ex-log-submit { margin-top: 2px; padding: 12px; }
-    .ex-error { font-size: 12px; color: #ff5555; margin-top: 6px; min-height: 16px; }
     .ex-done-msg { padding: 12px 16px; font-size: 13px; color: #44ff88; }
     .ex-skipped-msg { padding: 12px 16px; font-size: 13px; color: var(--muted);
       font-style: italic; }
@@ -557,17 +548,22 @@
 <div id="overlay-logset" class="overlay" onclick="overlayBgClick(event,'overlay-logset')">
   <div class="overlay-sheet">
     <div class="overlay-handle"></div>
-    <div class="overlay-title" id="logset-title">LOG SET</div>
-    <div class="field" id="logset-plan-info" style="margin-bottom:16px">
-      <span style="font-size:13px;color:var(--muted)"></span></div>
+    <div class="overlay-title" id="logset-title">ЗАПИСАТИ ПІДХІД</div>
+    <div id="logset-info" style="margin-bottom:14px;font-size:13px;color:var(--muted);line-height:1.7"></div>
     <div class="row2">
-      <div class="field"><label>Reps</label><input type="number" id="logset-reps" placeholder="10" min="0"></div>
-      <div class="field"><label>Weight (kg)</label><input type="number" id="logset-weight" placeholder="60" step="0.5" min="0"></div>
+      <div class="field"><label>Вага (кг)</label><input type="number" id="logset-weight" placeholder="0" step="0.5" min="0" autocomplete="off"></div>
+      <div class="field"><label>Повтори</label><input type="number" id="logset-reps" placeholder="0" min="1" autocomplete="off"></div>
     </div>
-    <div class="field"><label>RPE (1–10, optional)</label>
-      <div class="scale-row" id="scale-logset-rpe"></div></div>
+    <div class="field"><label>RPE</label>
+      <div class="rpe-row" id="logset-rpe-row">
+        <button class="rpe-btn" onclick="setLogsetRPE(5,this)">Легко</button>
+        <button class="rpe-btn" onclick="setLogsetRPE(7,this)">Нормально</button>
+        <button class="rpe-btn" onclick="setLogsetRPE(8,this)">Важко</button>
+        <button class="rpe-btn" onclick="setLogsetRPE(9,this)">На межі</button>
+      </div>
+    </div>
     <div id="logset-msg"></div>
-    <button class="btn btn-primary" onclick="submitLogSet()">LOG SET</button>
+    <button class="btn btn-primary" onclick="submitLogSet()">ЗАПИСАТИ</button>
   </div>
 </div>
 
@@ -1452,21 +1448,13 @@ function renderExerciseCard(ex) {
   const restState = S.restTimers[eid];
   const cardState = S.cardState[eid] || {};
 
-  // Header meta
   const planStr = ex.sets?.length ? `${ex.sets.length} × ${ex.sets[0].target_reps || '?'}` : '';
-  const recStr = rec
-    ? [rec.recommended_weight_kg ? `${rec.recommended_weight_kg}kg` : '',
-       (rec.recommended_reps_min && rec.recommended_reps_max)
-         ? `${rec.recommended_reps_min}–${rec.recommended_reps_max} повт` : ''].filter(Boolean).join(' × ')
-    : '';
-  const lastStr = rec?.last?.weight_kg
-    ? `${rec.last.weight_kg}kg × ${rec.last.reps || '?'}`
-    : null;
+  const _recStr = buildRecStr(rec);
+  const lastStr = rec?.last?.weight_kg ? `${rec.last.weight_kg}kg × ${rec.last.reps || '?'}` : null;
 
-  // Logged sets
   const setsHTML = logged.map((s, i) => {
     let badge = '';
-    if (i === logged.length - 1 && rec) {
+    if (rec) {
       const repsAbove = rec.recommended_reps_max && s.reps > rec.recommended_reps_max;
       const wAbove = rec.recommended_weight_kg && s.weight > rec.recommended_weight_kg * 1.05;
       const repsOk = !rec.recommended_reps_min || s.reps >= rec.recommended_reps_min;
@@ -1483,12 +1471,11 @@ function renderExerciseCard(ex) {
     </div>`;
   }).join('');
 
-  // Body: rest timer / inputs / done / skipped
   const totalSets = ex.sets?.length || 3;
   let bodyHtml;
 
   if (cardState.skipped) {
-    bodyHtml = `<div class="ex-skipped-msg">✗ Пропущено</div>`;
+    bodyHtml = '<div class="ex-skipped-msg">✗ Пропущено</div>';
   } else if (restState) {
     const m = Math.floor(restState.remaining / 60);
     const sec = String(restState.remaining % 60).padStart(2, '0');
@@ -1501,30 +1488,9 @@ function renderExerciseCard(ex) {
       </div>${tip}
     </div>`;
   } else if (logged.length >= totalSets) {
-    bodyHtml = `<div class="ex-done-msg">✓ Всі підходи виконано</div>`;
+    bodyHtml = '<div class="ex-done-msg">✓ Всі підходи виконано</div>';
   } else {
-    const setNum = logged.length + 1;
-    const defaultW = rec?.recommended_weight_kg || ex.sets?.[logged.length]?.target_weight_kg || '';
-    const selRpe = cardState.rpe;
-    const rpeBtns = [{l:'Легко',v:5},{l:'Нормально',v:7},{l:'Важко',v:8},{l:'На межі',v:9}]
-      .map(({l,v}) => `<button class="rpe-btn${selRpe===v?' sel':''}" onclick="setRPE(${eid},${v},this)">${l}</button>`)
-      .join('');
-    bodyHtml = `<div class="ex-input-area">
-      <div class="ex-set-label">Підхід ${setNum}</div>
-      <div class="ex-inputs-row">
-        <div class="ex-input-group">
-          <input type="number" id="w-${eid}" class="ex-num-input" value="${defaultW}" placeholder="0" step="0.5" min="0" inputmode="decimal">
-          <span class="ex-input-unit">кг</span>
-        </div>
-        <div class="ex-input-group">
-          <input type="number" id="r-${eid}" class="ex-num-input" placeholder="0" min="1" inputmode="numeric">
-          <span class="ex-input-unit">повт</span>
-        </div>
-      </div>
-      <div class="rpe-row">${rpeBtns}</div>
-      <button class="btn btn-primary ex-log-submit" onclick="logSetInline(${eid})">ЗАПИСАТИ ПІДХІД</button>
-      <div class="ex-error" id="err-${eid}"></div>
-    </div>`;
+    bodyHtml = `<button class="ex-log-btn" onclick="openLogSet(${eid})">+ ЗАПИСАТИ ПІДХІД ${logged.length + 1}</button>`;
   }
 
   const safeName = ex.exercise_name.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
@@ -1533,7 +1499,7 @@ function renderExerciseCard(ex) {
       <div class="ex-name">${_esc(ex.exercise_name)}</div>
       <div class="ex-meta-row">
         ${planStr ? `<span class="ex-plan-tag">${planStr}</span>` : ''}
-        ${recStr ? `<span class="ex-rec-tag">▲ ${_esc(recStr)}</span>` : ''}
+        ${_recStr ? `<span class="ex-rec-tag">▲ ${_esc(_recStr)}</span>` : ''}
         ${lastStr ? `<span class="ex-last-tag">↩ ${_esc(lastStr)}</span>` : ''}
       </div>
     </div>
@@ -1547,62 +1513,87 @@ function renderExerciseCard(ex) {
   </div>`;
 }
 
-function setRPE(exerciseId, value, btn) {
-  if (!S.cardState[exerciseId]) S.cardState[exerciseId] = {};
-  S.cardState[exerciseId].rpe = value;
-  btn.closest('.rpe-row').querySelectorAll('.rpe-btn').forEach(b => b.classList.remove('sel'));
+function buildRecStr(rec) {
+  if (!rec) return '';
+  const w = rec.recommended_weight_kg ? `${rec.recommended_weight_kg}kg` : '';
+  const r = (rec.recommended_reps_min && rec.recommended_reps_max)
+    ? `${rec.recommended_reps_min}–${rec.recommended_reps_max} повт` : '';
+  return [w, r].filter(Boolean).join(' × ');
+}
+
+function setLogsetRPE(value, btn) {
+  S._logsetRpe = value;
+  document.querySelectorAll('#logset-rpe-row .rpe-btn').forEach(b => b.classList.remove('sel'));
   btn.classList.add('sel');
   haptic('light');
 }
 
-async function logSetInline(exerciseId) {
-  const weightEl = document.getElementById('w-' + exerciseId);
-  const repsEl = document.getElementById('r-' + exerciseId);
-  const errEl = document.getElementById('err-' + exerciseId);
-  const weight = parseFloat(weightEl?.value) || 0;
-  const reps = parseInt(repsEl?.value);
-  const rpe = S.cardState[exerciseId]?.rpe || null;
-
-  if (!reps || reps < 1) {
-    if (errEl) errEl.textContent = 'Введи кількість повторів';
-    return;
-  }
-  if (errEl) errEl.textContent = '';
-
+function openLogSet(exerciseId) {
+  const ex = S.todayWorkout?.exercises?.find(e => e.exercise_id === exerciseId);
+  if (!ex) return;
   const logged = S.sessionExercises[exerciseId] || [];
   const setNum = logged.length + 1;
+  const rec = S.todayTargets?.[exerciseId];
+  const planSet = ex.sets?.[logged.length];
+
+  S.logsetTarget = {exerciseId, exerciseName: ex.exercise_name, setNum, ex};
+  S._logsetRpe = null;
+
+  document.getElementById('logset-title').textContent = `${ex.exercise_name} — ПІДХІД ${setNum}`;
+
+  const parts = [];
+  const rs = buildRecStr(rec);
+  if (rs) parts.push(`▲ ${rs}`);
+  if (rec?.last?.weight_kg) parts.push(`↩ Минулого: ${rec.last.weight_kg}kg × ${rec.last.reps || '?'}`);
+  else if (planSet) parts.push(`Плановано: ${planSet.target_reps || '?'} повт`);
+  document.getElementById('logset-info').innerHTML = parts.map(p => `<div>${p}</div>`).join('');
+
+  document.getElementById('logset-weight').value = rec?.recommended_weight_kg || planSet?.target_weight_kg || '';
+  document.getElementById('logset-reps').value = '';
+  document.querySelectorAll('#logset-rpe-row .rpe-btn').forEach(b => b.classList.remove('sel'));
+  document.getElementById('logset-msg').innerHTML = '';
+  haptic(); openOverlay('overlay-logset');
+}
+
+async function submitLogSet() {
+  const tgt = S.logsetTarget;
+  const reps = parseInt(document.getElementById('logset-reps').value);
+  const weight = parseFloat(document.getElementById('logset-weight').value) || 0;
+  const rpe = S._logsetRpe || null;
+  const msgEl = document.getElementById('logset-msg');
+
+  if (!reps || reps < 1) { msgEl.innerHTML = '<div class="error-msg">Введи кількість повторів</div>'; return; }
+  msgEl.innerHTML = '';
 
   const r = await api('POST', '/api/training/session/log-set', {
     session_id: S.sessionId,
-    exercise_id: exerciseId,
-    set_number: setNum,
+    exercise_id: tgt.exerciseId,
+    set_number: tgt.setNum,
     actual_reps: reps,
     actual_weight_kg: weight,
     actual_rpe: rpe,
   });
-  if (!r.success) {
-    if (errEl) errEl.textContent = 'Помилка збереження';
-    return;
-  }
+  if (!r.success) { msgEl.innerHTML = '<div class="error-msg">Помилка збереження</div>'; return; }
 
-  if (!S.sessionExercises[exerciseId]) S.sessionExercises[exerciseId] = [];
-  S.sessionExercises[exerciseId].push({reps, weight, rpe, rpeLabel: RPE_LABELS[rpe] || null});
-  if (S.cardState[exerciseId]) S.cardState[exerciseId].rpe = null;
+  if (!S.sessionExercises[tgt.exerciseId]) S.sessionExercises[tgt.exerciseId] = [];
+  S.sessionExercises[tgt.exerciseId].push({reps, weight, rpe, rpeLabel: RPE_LABELS[rpe] || null});
 
+  closeOverlay('overlay-logset');
   haptic('medium');
 
-  const ex = S.todayWorkout?.exercises?.find(e => e.exercise_id === exerciseId);
+  const ex = tgt.ex;
   const totalSets = ex?.sets?.length || 3;
+  const loggedCount = S.sessionExercises[tgt.exerciseId].length;
 
-  if (logged.length + 1 < totalSets) {
-    const restSecs = ex?.sets?.[0]?.rest_seconds || 90;
-    const tip = ex?.coaching_notes || ex?.selection_reason || null;
-    startRestTimer(exerciseId, restSecs, tip);
+  if (loggedCount < totalSets && ex) {
+    const restSecs = ex.sets?.[0]?.rest_seconds || 90;
+    const tip = ex.coaching_notes || ex.selection_reason || null;
+    startRestTimer(tgt.exerciseId, restSecs, tip);
   }
 
-  const card = document.getElementById('ex-' + exerciseId);
-  if (card && ex) card.outerHTML = renderExerciseCard(ex);
+  if (ex) { const card = document.getElementById('ex-' + tgt.exerciseId); if (card) card.outerHTML = renderExerciseCard(ex); }
 }
+
 
 function startRestTimer(exerciseId, seconds, tip) {
   if (S.restTimers[exerciseId]) clearInterval(S.restTimers[exerciseId].intervalId);
