@@ -1,4 +1,5 @@
 import json
+import re
 from app.core.ai import complete
 from app.core.models import User
 from app.extensions import db
@@ -164,6 +165,9 @@ Structure:
 Ensure all exercises respect the user's injuries and mobility restrictions."""
 
     result = complete(system_prompt, user_prompt, max_tokens=8192, model='claude-sonnet-4-6')
+    # Strip markdown code fences that the model sometimes wraps around JSON
+    result = re.sub(r'^```(?:json)?\s*', '', result.strip())
+    result = re.sub(r'\s*```$', '', result).strip()
     try:
         return json.loads(result)
     except json.JSONDecodeError as e:
