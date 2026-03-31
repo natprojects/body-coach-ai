@@ -369,6 +369,13 @@
     #program-content.insights-hidden .prog-insight { display: none; }
 
     /* ── DELOAD BANNER ── */
+    .resume-banner { background: rgba(0,120,255,0.08); border: 1px solid rgba(0,120,255,0.3);
+      border-radius: 4px; padding: 14px 16px; margin-bottom: 12px; }
+    .resume-banner-title { font-family: 'Barlow Condensed', sans-serif; font-size: 14px;
+      font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: #4af;
+      margin-bottom: 4px; }
+    .resume-banner-meta { font-size: 12px; color: var(--muted); margin-bottom: 12px; }
+    .resume-banner-btns { display: flex; gap: 8px; }
     .weekly-btn { display: flex; align-items: center; gap: 8px; background: var(--card);
       border: 1px solid var(--border); border-radius: 4px; padding: 10px 14px; cursor: pointer;
       font-family: 'Barlow Condensed', sans-serif; font-size: 13px; font-weight: 700;
@@ -867,10 +874,11 @@ function setLoading(msg) {
 // ── MAIN ──
 async function loadMain() {
   setLoading('Loading workout...');
-  const [r, userR, recR] = await Promise.all([
+  const [r, userR, recR, activeR] = await Promise.all([
     api('GET', '/api/training/today'),
     api('GET', '/api/users/me'),
     api('GET', '/api/training/recommendations/today'),
+    api('GET', '/api/training/session/active'),
   ]);
   S.todayWorkout = r.success ? r.data : null;
   if (recR.success) {
@@ -882,6 +890,11 @@ async function loadMain() {
   if (userR.success && userR.data.app_language) {
     _lang = userR.data.app_language;
   }
+  S.pendingResume = (activeR.success && activeR.data) ? activeR.data : null;
+  // If active session has workout data, use it as todayWorkout for resume
+  if (S.pendingResume?.workout) {
+    S.todayWorkout = S.pendingResume.workout;
+  }
   applyTranslations();
   renderTrainTab();
   showScreen('main');
@@ -889,6 +902,22 @@ async function loadMain() {
 
 function renderTrainTab() {
   const el = document.getElementById('train-content');
+
+  if (S.pendingResume) {
+    const r = S.pendingResume;
+    const exCount = Object.keys(r.logged || {}).length;
+    const setCount = Object.values(r.logged || {}).reduce((s, sets) => s + sets.length, 0);
+    el.innerHTML = `<div class="resume-banner">
+      <div class="resume-banner-title">⏸ Незавершене тренування</div>
+      <div class="resume-banner-meta">${r.workout?.name || 'Тренування'} · ${exCount} вправ · ${setCount} підходів записано</div>
+      <div class="resume-banner-btns">
+        <button class="btn btn-primary" style="flex:2" onclick="resumeWorkout()">ПРОДОВЖИТИ</button>
+        <button class="btn btn-ghost" style="flex:1" onclick="endAbandonedWorkout()">Завершити</button>
+      </div>
+    </div>`;
+    return;
+  }
+
   const w = S.todayWorkout;
 
   if (!w) {
@@ -1479,6 +1508,55 @@ async function startWorkout() {
   renderSession();
   showScreen('session');
   startTimer();
+}
+
+async function resumeWorkout() {
+  const resume = S.pendingResume;
+  S.pendingResume = null;
+  S.sessionId = resume.session_id;
+  S.sessionExercises = {};
+  S.cardState = {};
+  S.restTimers = {};
+  S.sessionStartTime = Date.now();
+
+  // Restore logged sets from DB
+  for (const [eidStr, sets] of Object.entries(resume.logged || {})) {
+    const eid = parseInt(eidStr);
+    S.sessionExercises[eid] = sets.map(s => ({
+      reps: s.actual_reps,
+      weight: s.actual_weight_kg,
+      rpe: s.actual_rpe,
+      rpeLabel: RPE_LABELS[s.actual_rpe] || null,
+    }));
+  }
+
+  renderSession();
+  showScreen('session');
+  startTimer();
+
+  // Scroll to last active exercise
+  if (resume.last_exercise_id) {
+    setTimeout(() => {
+      const card = document.getElementById('ex-' + resume.last_exercise_id);
+      if (card) card.scrollIntoView({behavior: 'smooth', block: 'center'});
+    }, 300);
+  }
+}
+
+async function endAbandonedWorkout() {
+  const resume = S.pendingResume;
+  S.pendingResume = null;
+  S.sessionId = resume.session_id;
+  const r = await api('POST', '/api/training/session/complete', {session_id: resume.session_id});
+  S.sessionId = null;
+  if (r.success && r.data?.feedback) {
+    document.getElementById('overlay-feedback-title').textContent = 'Workout Complete';
+    document.getElementById('feedback-text').innerHTML = parseTechniqueMarkdown(r.data.feedback);
+    S.nextSessionPlan = r.data.next_session_plan || [];
+    renderNextSessionPlan();
+    openOverlay('overlay-feedback');
+  }
+  renderTrainTab();
 }
 
 function renderSession() {

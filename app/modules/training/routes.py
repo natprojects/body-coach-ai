@@ -236,8 +236,44 @@ def session_log_set():
         notes=data.get('notes'),
     )
     db.session.add(ls)
+    session.last_exercise_id = exercise_id
     db.session.commit()
     return jsonify({'success': True, 'data': {'logged_set_id': ls.id}})
+
+
+@bp.route('/training/session/active', methods=['GET'])
+@require_auth
+def session_active():
+    session = (WorkoutSession.query
+               .filter_by(user_id=g.user_id, status='in_progress')
+               .order_by(WorkoutSession.id.desc())
+               .first())
+    if not session:
+        return jsonify({'success': True, 'data': None})
+
+    logged = {}
+    for le in session.logged_exercises:
+        logged[le.exercise_id] = [{
+            'set_number': s.set_number,
+            'actual_reps': s.actual_reps,
+            'actual_weight_kg': s.actual_weight_kg,
+            'actual_rpe': s.actual_rpe,
+        } for s in le.logged_sets]
+
+    workout_data = None
+    if session.workout_id:
+        workout = Workout.query.get(session.workout_id)
+        if workout:
+            workout_data = _serialize_workout_with_sets(workout)
+
+    return jsonify({'success': True, 'data': {
+        'session_id': session.id,
+        'workout_id': session.workout_id,
+        'date': session.date.isoformat(),
+        'last_exercise_id': session.last_exercise_id,
+        'logged': logged,
+        'workout': workout_data,
+    }})
 
 
 @bp.route('/training/session/complete', methods=['POST'])
