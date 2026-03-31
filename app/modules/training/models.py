@@ -75,6 +75,9 @@ class WorkoutExercise(db.Model):
     exercise_id = db.Column(db.Integer, db.ForeignKey('exercises.id'), nullable=False)
     order_index = db.Column(db.Integer, nullable=False)
     notes = db.Column(db.Text)
+    selection_reason = db.Column(db.Text)
+    expected_outcome = db.Column(db.Text)
+    modifications_applied = db.Column(db.Text)
 
     planned_sets = db.relationship('PlannedSet', backref='workout_exercise',
                                    order_by='PlannedSet.set_number',

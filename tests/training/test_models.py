@@ -60,3 +60,14 @@ def test_program_mesocycle_hierarchy(db, app):
 
     assert ls.actual_weight_kg == 62.5
     assert session.status == 'in_progress'
+
+
+def test_workout_exercise_has_insight_fields(db, app):
+    from app.modules.training.models import WorkoutExercise
+    we = WorkoutExercise(workout_id=1, exercise_id=1, order_index=0)
+    assert hasattr(we, 'selection_reason')
+    assert hasattr(we, 'expected_outcome')
+    assert hasattr(we, 'modifications_applied')
+    assert we.selection_reason is None
+    assert we.expected_outcome is None
+    assert we.modifications_applied is None
