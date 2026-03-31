@@ -187,3 +187,48 @@ def get_measurements_history():
         'left_arm_cm': e.left_arm_cm, 'right_arm_cm': e.right_arm_cm,
         'left_leg_cm': e.left_leg_cm, 'right_leg_cm': e.right_leg_cm,
     } for e in entries]})
+
+
+_PROFILE_FIELDS = {
+    'name', 'gender', 'age', 'weight_kg', 'height_cm', 'body_fat_pct',
+    'goal_primary', 'goal_secondary', 'level', 'training_days_per_week',
+    'session_duration_min', 'equipment', 'injuries_current', 'injuries_history',
+    'postural_issues', 'mobility_issues', 'muscle_imbalances',
+    'menstrual_tracking', 'cycle_length_days', 'last_period_date',
+    'training_likes', 'training_dislikes', 'previous_methods',
+    'had_coach_before', 'motivation_type',
+}
+
+
+def _serialize_user(user):
+    d = {f: getattr(user, f, None) for f in _PROFILE_FIELDS}
+    d['id'] = user.id
+    if d.get('last_period_date'):
+        d['last_period_date'] = d['last_period_date'].isoformat()
+    return d
+
+
+@bp.route('/users/me', methods=['GET'])
+@require_auth
+def get_user_me():
+    user = db.session.get(User, g.user_id)
+    return jsonify({'success': True, 'data': _serialize_user(user)})
+
+
+@bp.route('/users/me', methods=['PATCH'])
+@require_auth
+def patch_user_me():
+    user = db.session.get(User, g.user_id)
+    data = request.json or {}
+    from datetime import date as _date
+    for k, v in data.items():
+        if k not in _PROFILE_FIELDS:
+            continue
+        if k == 'last_period_date' and isinstance(v, str):
+            try:
+                v = _date.fromisoformat(v)
+            except ValueError:
+                continue
+        setattr(user, k, v)
+    db.session.commit()
+    return jsonify({'success': True, 'data': _serialize_user(user)})

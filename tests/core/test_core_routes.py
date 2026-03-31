@@ -82,3 +82,55 @@ def test_create_measurement(client, app, db):
     }, headers=_auth_header(app, user.id))
     assert resp.status_code == 200
     assert BodyMeasurement.query.filter_by(user_id=user.id).count() == 1
+
+
+def test_get_user_me(client, app, db):
+    from app.core.models import User
+    user = User(telegram_id=40001, name='Natalie', gender='female', age=26,
+                weight_kg=58.0, height_cm=163.0, goal_primary='hypertrophy',
+                level='intermediate', training_days_per_week=4)
+    db.session.add(user)
+    db.session.commit()
+    resp = client.get('/api/users/me', headers=_auth_header(app, user.id))
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert data['success'] is True
+    assert data['data']['name'] == 'Natalie'
+    assert data['data']['goal_primary'] == 'hypertrophy'
+    assert 'telegram_id' not in data['data']
+    assert 'password_hash' not in data['data']
+
+
+def test_patch_user_me(client, app, db):
+    from app.core.models import User
+    user = User(telegram_id=40002, name='Old Name', age=25)
+    db.session.add(user)
+    db.session.commit()
+    resp = client.patch('/api/users/me',
+                        json={'name': 'New Name', 'age': 27, 'weight_kg': 60.5},
+                        headers=_auth_header(app, user.id))
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert data['success'] is True
+    assert data['data']['name'] == 'New Name'
+    assert data['data']['age'] == 27
+    assert data['data']['weight_kg'] == 60.5
+
+
+def test_patch_user_me_ignores_protected_fields(client, app, db):
+    from app.core.models import User
+    user = User(telegram_id=40003)
+    db.session.add(user)
+    db.session.commit()
+    resp = client.patch('/api/users/me',
+                        json={'telegram_id': 99999, 'password_hash': 'hacked'},
+                        headers=_auth_header(app, user.id))
+    assert resp.status_code == 200
+    db.session.refresh(user)
+    assert user.telegram_id == 40003
+    assert user.password_hash is None
+
+
+def test_get_user_me_requires_auth(client):
+    resp = client.get('/api/users/me')
+    assert resp.status_code == 401
