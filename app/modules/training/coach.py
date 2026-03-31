@@ -149,3 +149,67 @@ Use day_of_week 0=Mon,1=Tue,2=Wed,3=Thu,4=Fri,5=Sat,6=Sun. Respect injuries/mobi
         return json.loads(result)
     except json.JSONDecodeError as e:
         raise ValueError(f"AI returned invalid JSON for program generation: {e}") from e
+
+
+def generate_exercise_insights(program, user) -> int:
+    """Generate selection_reason, expected_outcome, modifications_applied for all
+    WorkoutExercises in the program. Returns count of exercises updated."""
+    from .models import WorkoutExercise, Workout, ProgramWeek, Mesocycle
+
+    wes = (WorkoutExercise.query
+           .join(Workout)
+           .join(ProgramWeek)
+           .join(Mesocycle)
+           .filter(Mesocycle.program_id == program.id)
+           .order_by(Mesocycle.order_index, ProgramWeek.week_number,
+                     Workout.order_index, WorkoutExercise.order_index)
+           .all())
+
+    if not wes:
+        return 0
+
+    exercises_data = [{
+        'workout_exercise_id': we.id,
+        'exercise_name': we.exercise.name,
+        'workout_name': we.workout.name,
+        'day_of_week': we.workout.day_of_week,
+    } for we in wes]
+
+    system_prompt = (
+        "You are an expert strength and conditioning coach. "
+        "Return a JSON array only — no prose, no markdown fences. "
+        "For each exercise explain why it was chosen for this specific user, "
+        "what outcome to expect, and any modification made due to injuries/limitations. "
+        "If no modification was needed, set modifications_applied to null. "
+        "Return exactly one object per input exercise, in the same order."
+    )
+
+    user_prompt = (
+        f"User profile:\n"
+        f"- Goal: {user.goal_primary}, Level: {user.level}\n"
+        f"- Equipment: {user.equipment}\n"
+        f"- Injuries: {user.injuries_current}\n"
+        f"- Postural issues: {user.postural_issues}\n"
+        f"- Mobility issues: {user.mobility_issues}\n"
+        f"- Muscle imbalances: {user.muscle_imbalances}\n\n"
+        f"Exercises:\n{json.dumps(exercises_data, ensure_ascii=False)}\n\n"
+        "Return JSON array with fields: workout_exercise_id, selection_reason, "
+        "expected_outcome, modifications_applied"
+    )
+
+    raw = complete(system_prompt, user_prompt, max_tokens=4096, model='claude-sonnet-4-6')
+    raw = re.sub(r'^```(?:json)?\s*', '', raw.strip())
+    raw = re.sub(r'\s*```$', '', raw).strip()
+
+    insights = json.loads(raw)
+
+    we_map = {we.id: we for we in wes}
+    for item in insights:
+        we = we_map.get(item.get('workout_exercise_id'))
+        if we:
+            we.selection_reason = item.get('selection_reason')
+            we.expected_outcome = item.get('expected_outcome')
+            we.modifications_applied = item.get('modifications_applied')
+
+    db.session.commit()
+    return len(insights)

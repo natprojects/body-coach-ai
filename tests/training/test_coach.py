@@ -99,3 +99,33 @@ def test_generate_program_requires_onboarding(client, app, db):
     resp = client.post('/api/training/program/generate',
                        headers={'Authorization': f'Bearer {token}'})
     assert resp.status_code == 400
+
+
+def test_generate_exercise_insights(db, app, mock_anthropic):
+    from app.modules.training.coach import save_program_from_dict, generate_exercise_insights
+    from app.modules.training.models import WorkoutExercise
+    import json
+
+    user = _make_user(db)
+    program = save_program_from_dict(user.id, SAMPLE_PROGRAM)
+
+    we = WorkoutExercise.query.first()
+    insights_response = [
+        {
+            "workout_exercise_id": we.id,
+            "selection_reason": "Great compound push movement for hypertrophy",
+            "expected_outcome": "Increased chest and front delt mass",
+            "modifications_applied": None,
+        }
+    ]
+    mock_anthropic.messages.create.return_value = MagicMock(
+        content=[MagicMock(text=json.dumps(insights_response))]
+    )
+
+    count = generate_exercise_insights(program, user)
+
+    we_refreshed = db.session.get(WorkoutExercise, we.id)
+    assert count >= 1
+    assert we_refreshed.selection_reason == "Great compound push movement for hypertrophy"
+    assert we_refreshed.expected_outcome == "Increased chest and front delt mass"
+    assert we_refreshed.modifications_applied is None
