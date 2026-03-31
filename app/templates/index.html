@@ -288,6 +288,7 @@
       padding: 6px 0 2px; display: none; }
     .prog-insight-body.open { display: block; }
     .prog-mod-badge { color: #ffaa44; font-size: 11px; }
+    #program-content.insights-hidden .prog-insight { display: none; }
   </style>
 </head>
 <body>
@@ -899,6 +900,15 @@ async function saveProfile() {
 
 // ── PROGRAM TAB ──
 let _programData = null;
+let _showInsights = false;
+
+function toggleInsightsVisibility() {
+  _showInsights = !_showInsights;
+  const content = document.getElementById('program-content');
+  if (content) content.classList.toggle('insights-hidden', !_showInsights);
+  const btn = document.getElementById('insights-toggle-btn');
+  if (btn) btn.textContent = _showInsights ? 'HIDE INSIGHTS' : 'SHOW INSIGHTS';
+}
 
 async function loadProgramTab() {
   const el = document.getElementById('program-content');
@@ -929,7 +939,12 @@ function renderProgramTab() {
   }
 
   const insightsBtn = p.insights_generated
-    ? `<div class="insights-ready">✓ Exercise Insights Ready</div>`
+    ? `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+        <div class="insights-ready">✓ Exercise Insights Ready</div>
+        <button class="btn btn-ghost" id="insights-toggle-btn"
+          style="width:auto;padding:6px 14px;font-size:12px;flex-shrink:0"
+          onclick="toggleInsightsVisibility()">${_showInsights ? 'HIDE INSIGHTS' : 'SHOW INSIGHTS'}</button>
+      </div>`
     : `<div class="prog-insights-btn">
         <button class="btn btn-ghost" id="insights-btn" onclick="generateInsights()">
           GENERATE EXERCISE INSIGHTS
@@ -997,6 +1012,11 @@ function renderProgramTab() {
       ${insightsBtn}
     </div>
     ${mesosHtml}`;
+  if (!_showInsights && p.insights_generated) {
+    el.classList.add('insights-hidden');
+  } else {
+    el.classList.remove('insights-hidden');
+  }
 }
 
 function toggleMeso(header) {
