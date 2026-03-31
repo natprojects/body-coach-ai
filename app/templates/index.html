@@ -677,8 +677,15 @@ function setLoading(msg) {
 // ── MAIN ──
 async function loadMain() {
   setLoading('Loading workout...');
-  const r = await api('GET', '/api/training/today');
+  const [r, userR] = await Promise.all([
+    api('GET', '/api/training/today'),
+    api('GET', '/api/users/me'),
+  ]);
   S.todayWorkout = r.success ? r.data : null;
+  if (userR.success && userR.data.app_language) {
+    _lang = userR.data.app_language;
+  }
+  applyTranslations();
   renderTrainTab();
   showScreen('main');
 }
@@ -887,6 +894,7 @@ async function saveProfile() {
     msg.appendChild(errDiv);
     return;
   }
+  const prevLang = _lang;
   _profileData = r.data;
   msg.innerHTML = '';
   _profileEditMode = false;
@@ -895,7 +903,143 @@ async function saveProfile() {
     const el = document.getElementById('user-name');
     if (el) el.textContent = r.data.name.toUpperCase();
   }
+  if (r.data.app_language && r.data.app_language !== prevLang) {
+    _lang = r.data.app_language;
+    applyTranslations();
+    if (_programData) renderProgramTab();
+    renderTrainTab();
+  }
   renderProfileView();
+}
+
+// ── I18N ──
+let _lang = 'en';
+
+const TRANSLATIONS = {
+  en: {
+    tab_train: 'Train', tab_program: 'Program', tab_nutrition: 'Nutrition',
+    tab_sleep: 'Sleep', tab_coach: 'Coach',
+    week: 'Week', current: 'CURRENT',
+    why_exercise: 'Why this exercise', expected_outcome: 'Expected outcome',
+    modification: 'Modification',
+    show_insights: 'SHOW INSIGHTS', hide_insights: 'HIDE INSIGHTS',
+    insights_ready: '✓ Exercise Insights Ready',
+    generate_insights: 'GENERATE EXERCISE INSIGHTS',
+    generating_insights: 'GENERATING INSIGHTS...',
+    no_program: 'No Program Yet',
+    no_program_body: 'Generate your personalized training program first.',
+    generate_program: 'GENERATE PROGRAM',
+    profile_title: 'Profile',
+    edit: 'EDIT', save: 'SAVE', cancel: 'CANCEL',
+    section_physical: 'Physical', section_goals: 'Goals',
+    section_training: 'Training', section_health: 'Health & Notes',
+    section_cycle: 'Cycle',
+    field_name: 'Name', field_gender: 'Gender', field_age: 'Age',
+    field_weight: 'Weight (kg)', field_height: 'Height (cm)',
+    field_body_fat: 'Body Fat (%)', field_weight_view: 'Weight',
+    field_height_view: 'Height', field_body_fat_view: 'Body Fat',
+    field_primary_goal: 'Primary Goal', field_secondary: 'Secondary',
+    field_level: 'Level', field_days_week: 'Days / Week',
+    field_session_duration: 'Session Duration (min)',
+    field_session_duration_view: 'Session Duration',
+    field_equipment: 'Equipment',
+    field_likes: 'Likes', field_dislikes: 'Dislikes',
+    field_likes_edit: 'Training Likes', field_dislikes_edit: 'Training Dislikes',
+    field_injuries_current: 'Current Injuries',
+    field_injuries_history: 'Injury History',
+    field_postural: 'Postural Issues', field_mobility: 'Mobility Issues',
+    field_imbalances: 'Muscle Imbalances',
+    field_cycle_length: 'Cycle Length', field_last_period: 'Last Period',
+    field_language: 'Language',
+    lang_en: 'English', lang_uk: 'Українська',
+    today_training: "Today's Training",
+    exercises: 'Exercises', sets: 'Sets', est_min: 'Est. min',
+    start_workout: 'START WORKOUT', finish_workout: 'COMPLETE WORKOUT',
+    no_program_train: 'No Program Yet',
+    no_program_train_body: 'Generate your personalized training program to get started.',
+    rest_day: 'Rest Day', rest_day_sub: "Recover. You've earned it.",
+    loading: 'Loading...', saving: 'Saving...', save_failed: 'Save failed',
+    failed_load_profile: 'Failed to load profile',
+    failed_load_program: 'Failed to load program',
+    done: 'DONE', try_again: 'TRY AGAIN',
+    weeks_meta: 'weeks',
+  },
+  uk: {
+    tab_train: 'Тренування', tab_program: 'Програма',
+    tab_nutrition: 'Харчування', tab_sleep: 'Сон', tab_coach: 'Тренер',
+    week: 'Тиждень', current: 'ПОТОЧНИЙ',
+    why_exercise: 'Чому ця вправа', expected_outcome: 'Очікуваний результат',
+    modification: 'Модифікація',
+    show_insights: 'ПОКАЗАТИ ІНСАЙТИ', hide_insights: 'СХОВАТИ ІНСАЙТИ',
+    insights_ready: '✓ Інсайти готові',
+    generate_insights: 'ЗГЕНЕРУВАТИ ІНСАЙТИ',
+    generating_insights: 'ГЕНЕРУЄМО ІНСАЙТИ...',
+    no_program: 'Програми ще немає',
+    no_program_body: 'Спочатку згенеруй персоналізовану програму тренувань.',
+    generate_program: 'ЗГЕНЕРУВАТИ ПРОГРАМУ',
+    profile_title: 'Профіль',
+    edit: 'РЕДАГУВАТИ', save: 'ЗБЕРЕГТИ', cancel: 'СКАСУВАТИ',
+    section_physical: 'Фізичні дані', section_goals: 'Цілі',
+    section_training: 'Тренування', section_health: 'Здоров\'я та нотатки',
+    section_cycle: 'Цикл',
+    field_name: 'Ім\'я', field_gender: 'Стать', field_age: 'Вік',
+    field_weight: 'Вага (кг)', field_height: 'Зріст (см)',
+    field_body_fat: 'Відсоток жиру (%)', field_weight_view: 'Вага',
+    field_height_view: 'Зріст', field_body_fat_view: 'Відсоток жиру',
+    field_primary_goal: 'Основна ціль', field_secondary: 'Додаткова',
+    field_level: 'Рівень', field_days_week: 'Днів на тиждень',
+    field_session_duration: 'Тривалість (хв)',
+    field_session_duration_view: 'Тривалість тренування',
+    field_equipment: 'Обладнання',
+    field_likes: 'Подобається', field_dislikes: 'Не подобається',
+    field_likes_edit: 'Що подобається', field_dislikes_edit: 'Що не подобається',
+    field_injuries_current: 'Поточні травми',
+    field_injuries_history: 'Історія травм',
+    field_postural: 'Постуральні проблеми', field_mobility: 'Проблеми з мобільністю',
+    field_imbalances: 'М\'язові дисбаланси',
+    field_cycle_length: 'Довжина циклу', field_last_period: 'Остання менструація',
+    field_language: 'Мова',
+    lang_en: 'English', lang_uk: 'Українська',
+    today_training: 'Тренування сьогодні',
+    exercises: 'Вправи', sets: 'Підходи', est_min: 'Хв приблизно',
+    start_workout: 'ПОЧАТИ ТРЕНУВАННЯ', finish_workout: 'ЗАВЕРШИТИ ТРЕНУВАННЯ',
+    no_program_train: 'Програми ще немає',
+    no_program_train_body: 'Згенеруй персоналізовану програму, щоб почати.',
+    rest_day: 'День відпочинку', rest_day_sub: 'Відновлюйся. Ти це заслужила.',
+    loading: 'Завантаження...', saving: 'Зберігаємо...', save_failed: 'Помилка збереження',
+    failed_load_profile: 'Не вдалося завантажити профіль',
+    failed_load_program: 'Не вдалося завантажити програму',
+    done: 'ГОТОВО', try_again: 'СПРОБУВАТИ ЗНОВУ',
+    weeks_meta: 'тижнів',
+  },
+};
+
+function t(key) { return TRANSLATIONS[_lang]?.[key] ?? TRANSLATIONS.en[key] ?? key; }
+
+function applyTranslations() {
+  // Nav tab labels
+  const navMap = {train:'tab_train', program:'tab_program', nutrition:'tab_nutrition', sleep:'tab_sleep', coach:'tab_coach'};
+  document.querySelectorAll('.nav-tab').forEach(tab => {
+    const key = navMap[tab.dataset.tab];
+    const lbl = tab.querySelector('.nav-tab-label');
+    if (key && lbl) lbl.textContent = t(key);
+  });
+  // Profile overlay title
+  const profileTitle = document.querySelector('#overlay-profile .overlay-title');
+  if (profileTitle) profileTitle.textContent = t('profile_title');
+  // Profile edit toggle button (only if in view mode)
+  const editToggle = document.getElementById('profile-edit-toggle');
+  if (editToggle && editToggle.style.display !== 'none') editToggle.textContent = t('edit');
+  // Profile save/cancel buttons
+  const editBar = document.getElementById('profile-edit-bar');
+  if (editBar) {
+    const btns = editBar.querySelectorAll('button');
+    if (btns[0]) btns[0].textContent = t('cancel');
+    if (btns[1]) btns[1].textContent = t('save');
+  }
+  // Feedback overlay done button
+  const feedbackDone = document.querySelector('#overlay-feedback .btn-primary');
+  if (feedbackDone) feedbackDone.textContent = t('done');
 }
 
 // ── PROGRAM TAB ──
