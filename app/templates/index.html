@@ -939,7 +939,7 @@ function renderProgramTab() {
   const mesosHtml = p.mesocycles.map(m => `
     <div class="meso-block open">
       <div class="meso-header" onclick="toggleMeso(this)">
-        <span class="meso-name">${m.name}</span>
+        <span class="meso-name">${_esc(m.name)}</span>
         <span class="meso-chevron">▲</span>
       </div>
       <div class="meso-body">
@@ -954,7 +954,7 @@ function renderProgramTab() {
             <div class="week-body">
               ${w.workouts.map(wo => `
                 <div class="day-block">
-                  <div class="day-header">${DAY_NAMES[wo.day_of_week]} — ${wo.name}</div>
+                  <div class="day-header">${DAY_NAMES[wo.day_of_week]} — ${_esc(wo.name)}</div>
                   ${wo.exercises.map(ex => {
                     const setsStr = ex.sets.length > 0
                       ? `${ex.sets.length}×${ex.sets[0].target_reps} @${ex.sets[0].target_weight_kg}kg RPE${ex.sets[0].target_rpe}`
@@ -963,23 +963,23 @@ function renderProgramTab() {
                       <div class="prog-insight">
                         <button type="button" class="prog-insight-toggle"
                           onclick="toggleInsight(this)"><span class="insight-arrow">▶</span> Why this exercise</button>
-                        <div class="prog-insight-body">${ex.selection_reason || '—'}</div>
+                        <div class="prog-insight-body">${_esc(ex.selection_reason) || '—'}</div>
                       </div>
                       <div class="prog-insight">
                         <button type="button" class="prog-insight-toggle"
                           onclick="toggleInsight(this)"><span class="insight-arrow">▶</span> Expected outcome</button>
-                        <div class="prog-insight-body">${ex.expected_outcome || '—'}</div>
+                        <div class="prog-insight-body">${_esc(ex.expected_outcome) || '—'}</div>
                       </div>
                       ${ex.modifications_applied ? `
                       <div class="prog-insight">
                         <button type="button" class="prog-insight-toggle"
                           onclick="toggleInsight(this)"><span class="insight-arrow">▶</span> <span class="prog-mod-badge">⚠ Modification</span></button>
-                        <div class="prog-insight-body">${ex.modifications_applied}</div>
+                        <div class="prog-insight-body">${_esc(ex.modifications_applied)}</div>
                       </div>` : ''}` : '';
                     return `
                     <div class="prog-ex-row">
-                      <div class="prog-ex-name">${ex.exercise_name}</div>
-                      <div class="prog-ex-sets">${setsStr}</div>
+                      <div class="prog-ex-name">${_esc(ex.exercise_name)}</div>
+                      <div class="prog-ex-sets">${_esc(setsStr)}</div>
                       ${insightHtml}
                     </div>`;
                   }).join('')}
@@ -992,8 +992,8 @@ function renderProgramTab() {
 
   el.innerHTML = `
     <div class="prog-header">
-      <div class="prog-title">${p.name}</div>
-      <div class="prog-meta">${p.total_weeks} weeks · ${p.periodization_type}</div>
+      <div class="prog-title">${_esc(p.name)}</div>
+      <div class="prog-meta">${_esc(p.total_weeks)} weeks · ${_esc(p.periodization_type)}</div>
       ${insightsBtn}
     </div>
     ${mesosHtml}`;
