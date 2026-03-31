@@ -215,6 +215,30 @@
     .error-msg { color: #ff4444; font-size: 13px; text-align: center; margin-top: 8px; }
     .success-msg { color: #44ff88; font-size: 13px; text-align: center; margin-top: 8px; }
     .feedback-text { font-size: 14px; line-height: 1.6; color: #ccc; white-space: pre-wrap; }
+
+    /* ── PROFILE OVERLAY ── */
+    .profile-section { margin-bottom: 20px; }
+    .profile-section-title { font-family: 'Barlow Condensed', sans-serif; font-size: 11px;
+      font-weight: 700; letter-spacing: .18em; text-transform: uppercase;
+      color: var(--accent); margin-bottom: 12px; }
+    .profile-row { display: flex; justify-content: space-between; align-items: flex-start;
+      padding: 9px 0; border-bottom: 1px solid var(--border); gap: 12px; }
+    .profile-row:last-child { border-bottom: none; }
+    .profile-row-label { font-size: 12px; color: var(--muted); text-transform: uppercase;
+      letter-spacing: .06em; flex-shrink: 0; padding-top: 2px; }
+    .profile-row-value { font-size: 14px; color: var(--text); text-align: right; word-break: break-word; }
+    .profile-row input, .profile-row textarea, .profile-row select {
+      width: 100%; background: var(--card); border: 1px solid var(--border);
+      border-radius: 4px; color: var(--text); font-family: 'DM Sans', sans-serif;
+      font-size: 14px; padding: 7px 10px; outline: none; transition: border-color .2s; }
+    .profile-row input:focus, .profile-row textarea:focus, .profile-row select:focus {
+      border-color: var(--accent); }
+    .profile-row textarea { resize: none; height: 64px; }
+    #profile-icon { background: none; border: 1px solid var(--border); border-radius: 50%;
+      width: 32px; height: 32px; display: flex; align-items: center; justify-content: center;
+      cursor: pointer; font-size: 16px; transition: border-color .2s; flex-shrink: 0; }
+    #profile-icon:active { border-color: var(--accent); }
+    .profile-edit-bar { display: flex; gap: 10px; margin-top: 20px; }
   </style>
 </head>
 <body>
@@ -275,7 +299,10 @@
 <div id="screen-main" class="screen">
   <div class="status-bar">
     <span class="user-name" id="user-name">ATHLETE</span>
-    <span class="today-date" id="today-date"></span>
+    <div style="display:flex;align-items:center;gap:10px">
+      <span class="today-date" id="today-date"></span>
+      <button id="profile-icon" onclick="openProfile()">👤</button>
+    </div>
   </div>
   <div class="content">
     <div class="tab-panel active" id="panel-train">
@@ -389,6 +416,24 @@
     <p id="feedback-text" class="feedback-text">Generating feedback...</p>
     <div style="height:16px"></div>
     <button class="btn btn-primary" onclick="closeOverlay('overlay-feedback')">DONE</button>
+  </div>
+</div>
+
+<!-- OVERLAY: PROFILE -->
+<div id="overlay-profile" class="overlay" onclick="overlayBgClick(event,'overlay-profile')">
+  <div class="overlay-sheet">
+    <div class="overlay-handle"></div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+      <div class="overlay-title" style="margin-bottom:0">Profile</div>
+      <button id="profile-edit-toggle" class="btn btn-ghost"
+        style="width:auto;padding:7px 16px;font-size:13px" onclick="toggleProfileEdit()">EDIT</button>
+    </div>
+    <div id="profile-body"><!-- dynamic --></div>
+    <div id="profile-edit-bar" class="profile-edit-bar" style="display:none">
+      <button class="btn btn-ghost" style="flex:1" onclick="cancelProfileEdit()">CANCEL</button>
+      <button class="btn btn-primary" style="flex:2" onclick="saveProfile()">SAVE</button>
+    </div>
+    <div id="profile-msg"></div>
   </div>
 </div>
 
@@ -636,6 +681,158 @@ async function generateProgram() {
     btn.textContent = 'TRY AGAIN';
     btn.disabled = false;
   }
+}
+
+// ── PROFILE ──
+let _profileData = null;
+let _profileEditMode = false;
+
+async function openProfile() {
+  haptic();
+  openOverlay('overlay-profile');
+  document.getElementById('profile-body').innerHTML =
+    '<div style="color:var(--muted);font-size:13px;text-align:center;padding:20px">Loading...</div>';
+  const r = await api('GET', '/api/users/me');
+  if (!r.success) {
+    document.getElementById('profile-body').innerHTML =
+      '<div class="error-msg">Failed to load profile</div>';
+    return;
+  }
+  _profileData = r.data;
+  _profileEditMode = false;
+  renderProfileView();
+}
+
+function _fmt(val) {
+  if (val === null || val === undefined) return '—';
+  if (Array.isArray(val)) return val.length ? val.join(', ') : '—';
+  if (typeof val === 'boolean') return val ? 'Yes' : 'No';
+  return String(val);
+}
+
+function renderProfileView() {
+  const d = _profileData;
+  document.getElementById('profile-edit-toggle').style.display = '';
+  document.getElementById('profile-edit-toggle').textContent = 'EDIT';
+  document.getElementById('profile-edit-bar').style.display = 'none';
+
+  const sections = [
+    { title: 'Physical', rows: [
+      ['Name', d.name], ['Gender', d.gender], ['Age', d.age],
+      ['Weight', d.weight_kg ? d.weight_kg + ' kg' : '—'],
+      ['Height', d.height_cm ? d.height_cm + ' cm' : '—'],
+      ['Body Fat', d.body_fat_pct ? d.body_fat_pct + '%' : '—'],
+    ]},
+    { title: 'Goals', rows: [
+      ['Primary Goal', d.goal_primary], ['Secondary', _fmt(d.goal_secondary)],
+      ['Level', d.level],
+    ]},
+    { title: 'Training', rows: [
+      ['Days / Week', d.training_days_per_week],
+      ['Session Duration', d.session_duration_min ? d.session_duration_min + ' min' : '—'],
+      ['Equipment', _fmt(d.equipment)],
+      ['Likes', d.training_likes || '—'], ['Dislikes', d.training_dislikes || '—'],
+    ]},
+    { title: 'Health', rows: [
+      ['Current Injuries', _fmt(d.injuries_current)],
+      ['Injury History', _fmt(d.injuries_history)],
+      ['Postural Issues', _fmt(d.postural_issues)],
+      ['Mobility Issues', _fmt(d.mobility_issues)],
+      ['Muscle Imbalances', _fmt(d.muscle_imbalances)],
+    ]},
+  ];
+
+  if (d.menstrual_tracking) {
+    sections.push({ title: 'Cycle', rows: [
+      ['Cycle Length', d.cycle_length_days ? d.cycle_length_days + ' days' : '—'],
+      ['Last Period', d.last_period_date || '—'],
+    ]});
+  }
+
+  document.getElementById('profile-body').innerHTML = sections.map(s => `
+    <div class="profile-section">
+      <div class="profile-section-title">${s.title}</div>
+      ${s.rows.map(([label, val]) => `
+        <div class="profile-row">
+          <span class="profile-row-label">${label}</span>
+          <span class="profile-row-value">${val ?? '—'}</span>
+        </div>`).join('')}
+    </div>`).join('');
+}
+
+function toggleProfileEdit() {
+  _profileEditMode = true;
+  document.getElementById('profile-edit-toggle').style.display = 'none';
+  document.getElementById('profile-edit-bar').style.display = 'flex';
+
+  const d = _profileData;
+  const fields = [
+    { title: 'Physical', rows: [
+      ['name','Name','text', d.name||''],
+      ['age','Age','number', d.age||''],
+      ['weight_kg','Weight (kg)','number', d.weight_kg||''],
+      ['height_cm','Height (cm)','number', d.height_cm||''],
+      ['body_fat_pct','Body Fat (%)','number', d.body_fat_pct||''],
+    ]},
+    { title: 'Goals', rows: [
+      ['goal_primary','Primary Goal','text', d.goal_primary||''],
+      ['training_days_per_week','Days / Week','number', d.training_days_per_week||''],
+      ['session_duration_min','Session Duration (min)','number', d.session_duration_min||''],
+    ]},
+    { title: 'Health & Notes', rows: [
+      ['training_likes','Training Likes','textarea', d.training_likes||''],
+      ['training_dislikes','Training Dislikes','textarea', d.training_dislikes||''],
+    ]},
+  ];
+
+  document.getElementById('profile-body').innerHTML = fields.map(s => `
+    <div class="profile-section">
+      <div class="profile-section-title">${s.title}</div>
+      ${s.rows.map(([key, label, type, val]) => `
+        <div class="profile-row" style="flex-direction:column;align-items:stretch;gap:6px">
+          <span class="profile-row-label">${label}</span>
+          ${type === 'textarea'
+            ? `<textarea data-field="${key}">${val}</textarea>`
+            : `<input type="${type}" data-field="${key}" value="${val}">`
+          }
+        </div>`).join('')}
+    </div>`).join('');
+}
+
+function cancelProfileEdit() {
+  _profileEditMode = false;
+  renderProfileView();
+}
+
+async function saveProfile() {
+  const inputs = document.querySelectorAll('#profile-body [data-field]');
+  const patch = {};
+  inputs.forEach(el => {
+    const key = el.dataset.field;
+    const raw = el.value.trim();
+    if (['age','weight_kg','height_cm','body_fat_pct','training_days_per_week','session_duration_min'].includes(key)) {
+      patch[key] = raw === '' ? null : parseFloat(raw);
+    } else {
+      patch[key] = raw || null;
+    }
+  });
+
+  const msg = document.getElementById('profile-msg');
+  msg.innerHTML = '<div style="color:var(--muted);font-size:13px;text-align:center">Saving...</div>';
+  const r = await api('PATCH', '/api/users/me', patch);
+  if (!r.success) {
+    msg.innerHTML = `<div class="error-msg">${r.error?.message || 'Save failed'}</div>`;
+    return;
+  }
+  _profileData = r.data;
+  msg.innerHTML = '';
+  _profileEditMode = false;
+
+  if (r.data.name) {
+    const el = document.getElementById('user-name');
+    if (el) el.textContent = r.data.name.toUpperCase();
+  }
+  renderProfileView();
 }
 
 // ── TAB SWITCH ──
