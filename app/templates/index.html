@@ -697,9 +697,9 @@ function renderTrainTab() {
   if (!w) {
     el.innerHTML = `
       <div class="no-program-card">
-        <div class="np-title">No Program Yet</div>
-        <div class="np-body">Generate your personalized training program to get started.</div>
-        <button class="btn btn-primary" onclick="generateProgram()">GENERATE PROGRAM</button>
+        <div class="np-title">${t('no_program_train')}</div>
+        <div class="np-body">${t('no_program_train_body')}</div>
+        <button class="btn btn-primary" onclick="generateProgram()">${t('generate_program')}</button>
       </div>`;
     return;
   }
@@ -708,8 +708,8 @@ function renderTrainTab() {
     el.innerHTML = `
       <div class="rest-card">
         <div class="hero-label">Today</div>
-        <div class="rest-title">Rest Day</div>
-        <div style="font-size:13px;color:var(--muted);margin-top:8px">Recover. You've earned it.</div>
+        <div class="rest-title">${t('rest_day')}</div>
+        <div style="font-size:13px;color:var(--muted);margin-top:8px">${t('rest_day_sub')}</div>
       </div>`;
     return;
   }
@@ -720,14 +720,14 @@ function renderTrainTab() {
 
   el.innerHTML = `
     <div class="hero-card">
-      <div class="hero-label">Today's Training</div>
+      <div class="hero-label">${t('today_training')}</div>
       <div class="hero-title">${w.name || 'WORKOUT'}</div>
       <div class="hero-stats">
-        <div class="stat"><span class="stat-value">${exCount}</span><span class="stat-label">Exercises</span></div>
-        <div class="stat"><span class="stat-value">${setCount}</span><span class="stat-label">Sets</span></div>
-        <div class="stat"><span class="stat-value">${estMin}</span><span class="stat-label">Est. min</span></div>
+        <div class="stat"><span class="stat-value">${exCount}</span><span class="stat-label">${t('exercises')}</span></div>
+        <div class="stat"><span class="stat-value">${setCount}</span><span class="stat-label">${t('sets')}</span></div>
+        <div class="stat"><span class="stat-value">${estMin}</span><span class="stat-label">${t('est_min')}</span></div>
       </div>
-      <button class="btn btn-primary" onclick="startWorkout()">START WORKOUT</button>
+      <button class="btn btn-primary" onclick="startWorkout()">${t('start_workout')}</button>
     </div>`;
 }
 
@@ -757,11 +757,11 @@ async function openProfile() {
   haptic();
   openOverlay('overlay-profile');
   document.getElementById('profile-body').innerHTML =
-    '<div style="color:var(--muted);font-size:13px;text-align:center;padding:20px">Loading...</div>';
+    `<div style="color:var(--muted);font-size:13px;text-align:center;padding:20px">${t('loading')}</div>`;
   const r = await api('GET', '/api/users/me');
   if (!r.success) {
     document.getElementById('profile-body').innerHTML =
-      '<div class="error-msg">Failed to load profile</div>';
+      `<div class="error-msg">${t('failed_load_profile')}</div>`;
     return;
   }
   _profileData = r.data;
@@ -779,39 +779,42 @@ function _fmt(val) {
 function renderProfileView() {
   const d = _profileData;
   document.getElementById('profile-edit-toggle').style.display = '';
-  document.getElementById('profile-edit-toggle').textContent = 'EDIT';
+  document.getElementById('profile-edit-toggle').textContent = t('edit');
   document.getElementById('profile-edit-bar').style.display = 'none';
 
   const sections = [
-    { title: 'Physical', rows: [
-      ['Name', d.name], ['Gender', d.gender], ['Age', d.age],
-      ['Weight', d.weight_kg ? d.weight_kg + ' kg' : '—'],
-      ['Height', d.height_cm ? d.height_cm + ' cm' : '—'],
-      ['Body Fat', d.body_fat_pct ? d.body_fat_pct + '%' : '—'],
+    { title: t('section_physical'), rows: [
+      [t('field_name'), d.name], [t('field_gender'), d.gender], [t('field_age'), d.age],
+      [t('field_weight_view'), d.weight_kg ? d.weight_kg + ' kg' : '—'],
+      [t('field_height_view'), d.height_cm ? d.height_cm + ' cm' : '—'],
+      [t('field_body_fat_view'), d.body_fat_pct ? d.body_fat_pct + '%' : '—'],
     ]},
-    { title: 'Goals', rows: [
-      ['Primary Goal', d.goal_primary], ['Secondary', _fmt(d.goal_secondary)],
-      ['Level', d.level],
+    { title: t('section_goals'), rows: [
+      [t('field_primary_goal'), d.goal_primary], [t('field_secondary'), _fmt(d.goal_secondary)],
+      [t('field_level'), d.level],
     ]},
-    { title: 'Training', rows: [
-      ['Days / Week', d.training_days_per_week],
-      ['Session Duration', d.session_duration_min ? d.session_duration_min + ' min' : '—'],
-      ['Equipment', _fmt(d.equipment)],
-      ['Likes', d.training_likes || '—'], ['Dislikes', d.training_dislikes || '—'],
+    { title: t('section_training'), rows: [
+      [t('field_days_week'), d.training_days_per_week],
+      [t('field_session_duration_view'), d.session_duration_min ? d.session_duration_min + ' min' : '—'],
+      [t('field_equipment'), _fmt(d.equipment)],
+      [t('field_likes'), d.training_likes || '—'], [t('field_dislikes'), d.training_dislikes || '—'],
     ]},
-    { title: 'Health', rows: [
-      ['Current Injuries', _fmt(d.injuries_current)],
-      ['Injury History', _fmt(d.injuries_history)],
-      ['Postural Issues', _fmt(d.postural_issues)],
-      ['Mobility Issues', _fmt(d.mobility_issues)],
-      ['Muscle Imbalances', _fmt(d.muscle_imbalances)],
+    { title: t('section_health'), rows: [
+      [t('field_injuries_current'), _fmt(d.injuries_current)],
+      [t('field_injuries_history'), _fmt(d.injuries_history)],
+      [t('field_postural'), _fmt(d.postural_issues)],
+      [t('field_mobility'), _fmt(d.mobility_issues)],
+      [t('field_imbalances'), _fmt(d.muscle_imbalances)],
+    ]},
+    { title: t('field_language'), rows: [
+      [t('field_language'), d.app_language === 'uk' ? t('lang_uk') : t('lang_en')],
     ]},
   ];
 
   if (d.menstrual_tracking) {
-    sections.push({ title: 'Cycle', rows: [
-      ['Cycle Length', d.cycle_length_days ? d.cycle_length_days + ' days' : '—'],
-      ['Last Period', d.last_period_date || '—'],
+    sections.push({ title: t('section_cycle'), rows: [
+      [t('field_cycle_length'), d.cycle_length_days ? d.cycle_length_days + ' days' : '—'],
+      [t('field_last_period'), d.last_period_date || '—'],
     ]});
   }
 
@@ -824,6 +827,7 @@ function renderProfileView() {
           <span class="profile-row-value">${val !== null && val !== undefined ? _esc(String(val)) : '—'}</span>
         </div>`).join('')}
     </div>`).join('');
+  applyTranslations();
 }
 
 function toggleProfileEdit() {
@@ -833,24 +837,25 @@ function toggleProfileEdit() {
 
   const d = _profileData;
   const fields = [
-    { title: 'Physical', rows: [
-      ['name','Name','text', d.name||''],
-      ['age','Age','number', d.age||''],
-      ['weight_kg','Weight (kg)','number', d.weight_kg||''],
-      ['height_cm','Height (cm)','number', d.height_cm||''],
-      ['body_fat_pct','Body Fat (%)','number', d.body_fat_pct||''],
+    { title: t('section_physical'), rows: [
+      ['name', t('field_name'), 'text', d.name||''],
+      ['age', t('field_age'), 'number', d.age||''],
+      ['weight_kg', t('field_weight'), 'number', d.weight_kg||''],
+      ['height_cm', t('field_height'), 'number', d.height_cm||''],
+      ['body_fat_pct', t('field_body_fat'), 'number', d.body_fat_pct||''],
     ]},
-    { title: 'Goals', rows: [
-      ['goal_primary','Primary Goal','text', d.goal_primary||''],
-      ['training_days_per_week','Days / Week','number', d.training_days_per_week||''],
-      ['session_duration_min','Session Duration (min)','number', d.session_duration_min||''],
+    { title: t('section_goals'), rows: [
+      ['goal_primary', t('field_primary_goal'), 'text', d.goal_primary||''],
+      ['training_days_per_week', t('field_days_week'), 'number', d.training_days_per_week||''],
+      ['session_duration_min', t('field_session_duration'), 'number', d.session_duration_min||''],
     ]},
-    { title: 'Health & Notes', rows: [
-      ['training_likes','Training Likes','textarea', d.training_likes||''],
-      ['training_dislikes','Training Dislikes','textarea', d.training_dislikes||''],
+    { title: t('section_health'), rows: [
+      ['training_likes', t('field_likes_edit'), 'textarea', d.training_likes||''],
+      ['training_dislikes', t('field_dislikes_edit'), 'textarea', d.training_dislikes||''],
     ]},
   ];
 
+  const curLang = d.app_language || 'en';
   document.getElementById('profile-body').innerHTML = fields.map(s => `
     <div class="profile-section">
       <div class="profile-section-title">${s.title}</div>
@@ -862,7 +867,17 @@ function toggleProfileEdit() {
             : `<input type="${type}" data-field="${key}" value="${_esc(val)}">`
           }
         </div>`).join('')}
-    </div>`).join('');
+    </div>`).join('') + `
+    <div class="profile-section">
+      <div class="profile-section-title">${t('field_language')}</div>
+      <div class="profile-row" style="flex-direction:column;align-items:stretch;gap:6px">
+        <span class="profile-row-label">${t('field_language')}</span>
+        <select data-field="app_language">
+          <option value="en" ${curLang === 'en' ? 'selected' : ''}>${t('lang_en')}</option>
+          <option value="uk" ${curLang === 'uk' ? 'selected' : ''}>${t('lang_uk')}</option>
+        </select>
+      </div>
+    </div>`;
 }
 
 function cancelProfileEdit() {
@@ -884,12 +899,12 @@ async function saveProfile() {
   });
 
   const msg = document.getElementById('profile-msg');
-  msg.innerHTML = '<div style="color:var(--muted);font-size:13px;text-align:center">Saving...</div>';
+  msg.innerHTML = `<div style="color:var(--muted);font-size:13px;text-align:center">${t('saving')}</div>`;
   const r = await api('PATCH', '/api/users/me', patch);
   if (!r.success) {
     const errDiv = document.createElement('div');
     errDiv.className = 'error-msg';
-    errDiv.textContent = r.error?.message || 'Save failed';
+    errDiv.textContent = r.error?.message || t('save_failed');
     msg.innerHTML = '';
     msg.appendChild(errDiv);
     return;
@@ -1056,10 +1071,10 @@ function toggleInsightsVisibility() {
 
 async function loadProgramTab() {
   const el = document.getElementById('program-content');
-  el.innerHTML = '<div style="color:var(--muted);font-size:13px;text-align:center;padding:40px">Loading...</div>';
+  el.innerHTML = `<div style="color:var(--muted);font-size:13px;text-align:center;padding:40px">${t('loading')}</div>`;
   const r = await api('GET', '/api/training/program/full');
   if (!r.success) {
-    el.innerHTML = '<div class="error-msg">Failed to load program</div>';
+    el.innerHTML = `<div class="error-msg">${t('failed_load_program')}</div>`;
     return;
   }
   _programData = r.data;
@@ -1075,23 +1090,23 @@ function renderProgramTab() {
   if (!p) {
     el.innerHTML = `
       <div class="no-program-card">
-        <div class="np-title">No Program Yet</div>
-        <div class="np-body">Generate your personalized training program first.</div>
-        <button class="btn btn-primary" onclick="generateProgram()">GENERATE PROGRAM</button>
+        <div class="np-title">${t('no_program')}</div>
+        <div class="np-body">${t('no_program_body')}</div>
+        <button class="btn btn-primary" onclick="generateProgram()">${t('generate_program')}</button>
       </div>`;
     return;
   }
 
   const insightsBtn = p.insights_generated
     ? `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
-        <div class="insights-ready">✓ Exercise Insights Ready</div>
+        <div class="insights-ready">${t('insights_ready')}</div>
         <button class="btn btn-ghost" id="insights-toggle-btn"
           style="width:auto;padding:6px 14px;font-size:12px;flex-shrink:0"
-          onclick="toggleInsightsVisibility()">${_showInsights ? 'HIDE INSIGHTS' : 'SHOW INSIGHTS'}</button>
+          onclick="toggleInsightsVisibility()">${t(_showInsights ? 'hide_insights' : 'show_insights')}</button>
       </div>`
     : `<div class="prog-insights-btn">
         <button class="btn btn-ghost" id="insights-btn" onclick="generateInsights()">
-          GENERATE EXERCISE INSIGHTS
+          ${t('generate_insights')}
         </button>
       </div>`;
 
@@ -1107,8 +1122,8 @@ function renderProgramTab() {
           return `
           <div class="week-block ${isCurrent ? 'open current-week' : ''}">
             <div class="week-header" onclick="toggleWeek(this)">
-              <span class="week-label">Week ${w.week_number}</span>
-              ${isCurrent ? '<span class="week-current-badge">● CURRENT</span>' : '<span></span>'}
+              <span class="week-label">${t('week')} ${w.week_number}</span>
+              ${isCurrent ? `<span class="week-current-badge">● ${t('current')}</span>` : '<span></span>'}
             </div>
             <div class="week-body">
               ${w.workouts.map(wo => `
@@ -1121,18 +1136,18 @@ function renderProgramTab() {
                     const insightHtml = p.insights_generated ? `
                       <div class="prog-insight">
                         <button type="button" class="prog-insight-toggle"
-                          onclick="toggleInsight(this)"><span class="insight-arrow">▶</span> Why this exercise</button>
+                          onclick="toggleInsight(this)"><span class="insight-arrow">▶</span> ${t('why_exercise')}</button>
                         <div class="prog-insight-body">${_esc(ex.selection_reason) || '—'}</div>
                       </div>
                       <div class="prog-insight">
                         <button type="button" class="prog-insight-toggle"
-                          onclick="toggleInsight(this)"><span class="insight-arrow">▶</span> Expected outcome</button>
+                          onclick="toggleInsight(this)"><span class="insight-arrow">▶</span> ${t('expected_outcome')}</button>
                         <div class="prog-insight-body">${_esc(ex.expected_outcome) || '—'}</div>
                       </div>
                       ${ex.modifications_applied ? `
                       <div class="prog-insight">
                         <button type="button" class="prog-insight-toggle"
-                          onclick="toggleInsight(this)"><span class="insight-arrow">▶</span> <span class="prog-mod-badge">⚠ Modification</span></button>
+                          onclick="toggleInsight(this)"><span class="insight-arrow">▶</span> <span class="prog-mod-badge">⚠ ${t('modification')}</span></button>
                         <div class="prog-insight-body">${_esc(ex.modifications_applied)}</div>
                       </div>` : ''}` : '';
                     return `
@@ -1152,7 +1167,7 @@ function renderProgramTab() {
   el.innerHTML = `
     <div class="prog-header">
       <div class="prog-title">${_esc(p.name)}</div>
-      <div class="prog-meta">${_esc(p.total_weeks)} weeks · ${_esc(p.periodization_type)}</div>
+      <div class="prog-meta">${_esc(p.total_weeks)} ${t('weeks_meta')} · ${_esc(p.periodization_type)}</div>
       ${insightsBtn}
     </div>
     ${mesosHtml}`;
@@ -1181,7 +1196,7 @@ function toggleInsight(btn) {
 async function generateInsights() {
   const btn = document.getElementById('insights-btn');
   if (!btn) return;
-  btn.textContent = 'GENERATING INSIGHTS...';
+  btn.textContent = t('generating_insights');
   btn.disabled = true;
   haptic('medium');
   const r = await api('POST', '/api/training/program/insights', null, 120000);
@@ -1189,7 +1204,7 @@ async function generateInsights() {
     haptic('heavy');
     await loadProgramTab();
   } else {
-    btn.textContent = 'TRY AGAIN';
+    btn.textContent = t('try_again');
     btn.disabled = false;
   }
 }
