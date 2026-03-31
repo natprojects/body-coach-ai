@@ -272,6 +272,13 @@
     .error-msg { color: #ff4444; font-size: 13px; text-align: center; margin-top: 8px; }
     .success-msg { color: #44ff88; font-size: 13px; text-align: center; margin-top: 8px; }
     .feedback-text { font-size: 14px; line-height: 1.6; color: #ccc; white-space: pre-wrap; }
+    .tech-section { font-family: 'Barlow Condensed', sans-serif; font-size: 13px;
+      font-weight: 700; letter-spacing: .12em; text-transform: uppercase;
+      color: var(--accent); margin: 16px 0 8px; }
+    .tech-section:first-child { margin-top: 4px; }
+    .tech-item { display: flex; gap: 10px; font-size: 14px; line-height: 1.55;
+      color: #ccc; margin-bottom: 8px; }
+    .tech-bullet { color: var(--accent); flex-shrink: 0; margin-top: 1px; }
 
     /* ── PROFILE OVERLAY ── */
     .profile-section { margin-bottom: 20px; }
@@ -625,7 +632,7 @@
   <div class="overlay-sheet">
     <div class="overlay-handle"></div>
     <div class="overlay-title" id="technique-ex-name">Техніка</div>
-    <p id="technique-body" class="feedback-text" style="margin-top:4px">Завантаження...</p>
+    <div id="technique-body" style="margin-top:4px;font-size:13px;color:var(--muted)">Завантаження...</div>
     <div style="height:16px"></div>
     <button class="btn btn-ghost" onclick="closeOverlay('overlay-technique')">ЗАКРИТИ</button>
   </div>
@@ -1731,16 +1738,31 @@ function selectAlternative(newExerciseId, newName) {
   if (nameEl) nameEl.textContent = newName;
 }
 
+function parseTechniqueMarkdown(text) {
+  const lines = text.split('\n');
+  let html = '';
+  for (const raw of lines) {
+    const line = raw.trim();
+    if (!line) continue;
+    if (/^#{1,3}\s/.test(line)) {
+      html += `<div class="tech-section">${_esc(line.replace(/^#{1,3}\s*/, ''))}</div>`;
+    } else if (/^[-•*]\s/.test(line)) {
+      html += `<div class="tech-item"><span class="tech-bullet">▸</span><span>${_esc(line.replace(/^[-•*]\s*/, ''))}</span></div>`;
+    } else {
+      html += `<div class="tech-item"><span>${_esc(line)}</span></div>`;
+    }
+  }
+  return html;
+}
+
 function openTechnique(exerciseId, exName) {
   document.getElementById('technique-ex-name').textContent = exName;
   const body = document.getElementById('technique-body');
-  body.textContent = 'Завантаження...';
-  body.style.color = 'var(--muted)';
+  body.innerHTML = '<span style="color:var(--muted);font-size:13px">Завантаження...</span>';
   haptic(); openOverlay('overlay-technique');
   api('GET', `/api/training/exercise/${exerciseId}/technique`).then(r => {
-    body.style.color = '#ccc';
-    body.style.whiteSpace = 'pre-wrap';
-    body.textContent = r.success ? r.data.technique : 'Не вдалося завантажити';
+    body.innerHTML = r.success ? parseTechniqueMarkdown(r.data.technique)
+      : '<span style="color:var(--muted)">Не вдалося завантажити</span>';
   });
 }
 
