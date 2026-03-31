@@ -1,57 +1,217 @@
+from sqlalchemy import func
+
 from app.core.ai import build_base_system, complete
-from .models import WorkoutSession
+from .models import LoggedExercise, LoggedSet, WorkoutExercise, WorkoutSession
 
 
 def generate_post_workout_feedback(session: WorkoutSession, user_id: int) -> str:
-    system = (
-        build_base_system(user_id)
-        + "\n\nYou are reviewing a completed workout. Be encouraging, specific, and concise (3-5 sentences)."
-    )
+    from app.core.models import User
+    from app.extensions import db
 
-    lines = ["## Completed Workout Log"]
+    user = db.session.get(User, user_id)
+    lang = (getattr(user, 'app_language', 'en') or 'en')
+    lang_note = "Write ALL output in Ukrainian." if lang == 'uk' else "Write ALL output in English."
+
+    high_rpe_exercises = []
+    prs = []
+    log_lines = []
+
     for le in session.logged_exercises:
-        sets_text = ', '.join(
-            f"Set {s.set_number}: {s.actual_reps} reps @ {s.actual_weight_kg}kg RPE {s.actual_rpe}"
+        if not le.logged_sets:
+            continue
+
+        weights = [s.actual_weight_kg or 0 for s in le.logged_sets]
+        rpes = [s.actual_rpe or 0 for s in le.logged_sets]
+        avg_rpe = sum(rpes) / len(rpes)
+        max_weight = max(weights) if weights else 0
+
+        if avg_rpe >= 9:
+            high_rpe_exercises.append(le.exercise.name)
+
+        # PR check: compare max weight this session vs all previous sessions
+        prev_max = (
+            db.session.query(func.max(LoggedSet.actual_weight_kg))
+            .join(LoggedExercise, LoggedSet.logged_exercise_id == LoggedExercise.id)
+            .join(WorkoutSession, LoggedExercise.session_id == WorkoutSession.id)
+            .filter(
+                WorkoutSession.user_id == user_id,
+                WorkoutSession.status == 'completed',
+                WorkoutSession.id != session.id,
+                LoggedExercise.exercise_id == le.exercise_id,
+            )
+            .scalar() or 0
+        )
+        if max_weight > 0 and max_weight > prev_max:
+            prs.append(f"{le.exercise.name}: {max_weight}kg (previous best: {prev_max}kg)")
+
+        # Planned vs actual annotation
+        planned_note = ''
+        if session.workout_id:
+            we = WorkoutExercise.query.filter_by(
+                workout_id=session.workout_id,
+                exercise_id=le.exercise_id,
+            ).first()
+            if we and we.planned_sets:
+                p = we.planned_sets[0]
+                planned_note = f" [PLANNED: {p.target_reps} reps @ {p.target_weight_kg}kg]"
+
+        sets_text = '; '.join(
+            f"Set {s.set_number}: {s.actual_reps}r × {s.actual_weight_kg}kg RPE{s.actual_rpe}"
             for s in le.logged_sets
         )
-        lines.append(f"- {le.exercise.name}: {sets_text or 'no sets logged'}")
+        log_lines.append(f"- {le.exercise.name}{planned_note}: {sets_text} | avg RPE {avg_rpe:.1f}")
 
-    if session.workout_id:
-        from .models import Workout
-        workout = Workout.query.get(session.workout_id)
-        if workout:
-            lines.append(f"\nPlanned workout: {workout.name}")
+    overload_flag = len(high_rpe_exercises) >= 2
+    has_prs = bool(prs)
 
-    return complete(system, '\n'.join(lines))
+    sections = ["## ЩО ПРОЙШЛО ДОБРЕ", "## ВІДХИЛЕННЯ ВІД ПЛАНУ"]
+    if overload_flag:
+        sections.append("## ⚠️ ПЕРЕВАНТАЖЕННЯ")
+    if has_prs:
+        sections.append("## 🏆 НОВИЙ РЕКОРД")
+    sections.append("## ПОРАДА НА НАСТУПНЕ ТРЕНУВАННЯ")
+
+    rules = [
+        "- ЩО ПРОЙШЛО ДОБРЕ: cite exact exercises + numbers. 'bench press up 2.5kg = progress', not 'good job'.",
+        "- ВІДХИЛЕННЯ ВІД ПЛАНУ: compare actual vs planned sets/weight. State if deviation is OK or needs attention.",
+        (f"- ⚠️ ПЕРЕВАНТАЖЕННЯ: name the {len(high_rpe_exercises)} exercises with avg RPE≥9. Recommend recovery." if overload_flag else ""),
+        ("- 🏆 НОВИЙ РЕКОРД: celebrate each PR with exact numbers." if has_prs else ""),
+        "- ПОРАДА НА НАСТУПНЕ ТРЕНУВАННЯ: exactly ONE concrete actionable tip, not generic advice.",
+        "Use '- ' bullet points under each section. Keep each bullet under 15 words.",
+    ]
+
+    system = (
+        build_base_system(user_id)
+        + f"\n\n{lang_note}\n"
+        + "Post-workout feedback. Be SPECIFIC and data-driven — no generic praise.\n"
+        + "Output EXACTLY these markdown sections:\n"
+        + '\n'.join(sections) + "\n\n"
+        + '\n'.join(r for r in rules if r)
+    )
+
+    extra = ""
+    if overload_flag:
+        extra += f"\nHigh RPE (≥9): {', '.join(high_rpe_exercises)}"
+    if has_prs:
+        extra += f"\nNew PRs: {'; '.join(prs)}"
+
+    return complete(
+        system,
+        "Workout log:\n" + '\n'.join(log_lines) + extra,
+        max_tokens=1024,
+        model='claude-haiku-4-5-20251001',
+    )
 
 
 def generate_weekly_report(user_id: int, week_sessions: list) -> str:
     from datetime import date, timedelta
-    from app.core.models import PainJournal
+    from app.core.models import DailyCheckin, PainJournal, User
+    from app.extensions import db
+    from .models import ExerciseRecommendation
+
+    user = db.session.get(User, user_id)
+    lang = (getattr(user, 'app_language', 'en') or 'en')
+    lang_note = "Write ALL output in Ukrainian." if lang == 'uk' else "Write ALL output in English."
+
+    since = date.today() - timedelta(days=7)
+
+    # Volume per muscle group (total sets per mg this week)
+    volume: dict = {}
+    for sess in week_sessions:
+        for le in sess.logged_exercises:
+            mg = (getattr(le.exercise, 'muscle_group', None) or 'Інші').strip()
+            volume[mg] = volume.get(mg, 0) + len(le.logged_sets)
+
+    vol_lines = []
+    for mg, sets in sorted(volume.items()):
+        if sets < 10:
+            tag = '⚠️ нижче норми (10-20)'
+        elif sets > 20:
+            tag = '⚠️ вище норми (10-20)'
+        else:
+            tag = '✓ оптимально'
+        vol_lines.append(f"- {mg}: {sets} серій — {tag}")
+
+    # Check-ins
+    checkins = (DailyCheckin.query
+                .filter(DailyCheckin.user_id == user_id, DailyCheckin.date >= since)
+                .all())
+    poor_sleep = sum(1 for c in checkins if c.sleep_quality and c.sleep_quality < 5)
+    low_energy = sum(1 for c in checkins if c.energy_level and c.energy_level < 5)
+    energy_vals = [c.energy_level for c in checkins if c.energy_level]
+    avg_energy = sum(energy_vals) / len(energy_vals) if energy_vals else None
+    checkin_lines = []
+    if poor_sleep:
+        checkin_lines.append(f"- Poor sleep quality (<5/10) on {poor_sleep} days this week")
+    if low_energy:
+        checkin_lines.append(f"- Low energy (<5/10) on {low_energy} days")
+    if avg_energy is not None:
+        checkin_lines.append(f"- Average energy: {avg_energy:.1f}/10")
+
+    # Progressive overload summary
+    recs = (ExerciseRecommendation.query
+            .filter(ExerciseRecommendation.user_id == user_id,
+                    ExerciseRecommendation.created_at >= since)
+            .all())
+    progressing = [r.exercise.name for r in recs if r.recommendation_type in ('increase_weight', 'increase_reps')]
+    stagnating = [r.exercise.name for r in recs if r.recommendation_type == 'stagnation']
+
+    # Pain journal
+    pain_entries = (PainJournal.query
+                    .filter(PainJournal.user_id == user_id, PainJournal.date >= since)
+                    .all())
+
+    # Deload check
+    deload = check_deload_needed(user_id)
+
+    # Build session log
+    sess_lines = []
+    for sess in week_sessions:
+        sess_lines.append(f"\n### {sess.date.isoformat()}")
+        for le in sess.logged_exercises:
+            sets_text = ', '.join(f"{s.actual_reps}×{s.actual_weight_kg}kg" for s in le.logged_sets)
+            sess_lines.append(f"- {le.exercise.name}: {sets_text}")
+
+    sections = [
+        "## ЗАГАЛЬНИЙ ОБ'ЄМ ПО М'ЯЗАХ",
+        "## ПРОГРЕС ТА СТАГНАЦІЯ",
+        "## ВІДНОВЛЕННЯ ТА САМОПОЧУТТЯ",
+    ]
+    if deload:
+        sections.append("## ⚠️ ПОТРІБНЕ РОЗВАНТАЖЕННЯ")
+    sections.append("## ПЛАН НА НАСТУПНИЙ ТИЖДЕНЬ")
+
+    rules = [
+        "- ЗАГАЛЬНИЙ ОБ'ЄМ: use the pre-computed volume data. Flag muscle groups outside 10-20 set range.",
+        "- ПРОГРЕС: list specific exercises with actual numbers. Separate progressing vs stagnating.",
+        "- ВІДНОВЛЕННЯ: reference sleep + energy data; say concretely how it affected training.",
+        ("- ⚠️ РОЗВАНТАЖЕННЯ: explain exactly why deload is needed with specific evidence." if deload else ""),
+        "- ПЛАН НА НАСТУПНИЙ ТИЖДЕНЬ: 2-3 concrete adjustments with specific numbers.",
+        "Use '- ' bullets. Keep each bullet concise (under 20 words).",
+    ]
 
     system = (
         build_base_system(user_id)
-        + "\n\nGenerate a weekly training report. Include: performance trends, volume analysis, "
-          "pain/recovery notes, and 2-3 actionable recommendations for next week."
+        + f"\n\n{lang_note}\n"
+        + "Weekly training report. Be SPECIFIC — cite actual numbers, exercise names, dates.\n"
+        + "Output EXACTLY these sections:\n"
+        + '\n'.join(sections) + "\n\n"
+        + '\n'.join(r for r in rules if r)
     )
 
-    lines = [f"## Weekly Report — {date.today().isoformat()}"]
-    for session in week_sessions:
-        lines.append(f"\n### Session {session.date.isoformat()}")
-        for le in session.logged_exercises:
-            sets_text = ', '.join(f"{s.actual_reps}x{s.actual_weight_kg}kg" for s in le.logged_sets)
-            lines.append(f"- {le.exercise.name}: {sets_text}")
+    user_msg = (
+        f"Sessions this week ({len(week_sessions)} completed):"
+        + '\n'.join(sess_lines)
+        + "\n\nVolume per muscle group:\n"
+        + ('\n'.join(vol_lines) or '- No volume data')
+        + "\n\nCheck-ins:\n"
+        + ('\n'.join(checkin_lines) or '- No check-in data this week')
+        + (f"\n\nProgressive overload:\n- Progressing: {', '.join(progressing) or 'none'}\n- Stagnating: {', '.join(stagnating) or 'none'}" if recs else "")
+        + (f"\n\nPain journal:\n" + '\n'.join(f"- {p.date}: {p.body_part} ({p.pain_type}, intensity {p.intensity})" for p in pain_entries) if pain_entries else "")
+        + ("\n\n⚠️ DELOAD INDICATORS DETECTED" if deload else "")
+    )
 
-    since = date.today() - timedelta(days=7)
-    pain_entries = PainJournal.query.filter(
-        PainJournal.user_id == user_id, PainJournal.date >= since
-    ).all()
-    if pain_entries:
-        lines.append("\n## Pain Journal This Week")
-        for p in pain_entries:
-            lines.append(f"- {p.date}: {p.body_part} ({p.pain_type}, intensity {p.intensity})")
-
-    return complete(system, '\n'.join(lines))
+    return complete(system, user_msg, max_tokens=1500, model='claude-haiku-4-5-20251001')
 
 
 def analyze_session_and_recommend(session_id: int, user_id: int) -> list:
