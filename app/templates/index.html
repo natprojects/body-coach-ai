@@ -733,13 +733,13 @@ function renderTrainTab() {
 
 async function generateProgram() {
   const btn = document.querySelector('#train-content .btn');
-  btn.textContent = 'GENERATING...';
+  btn.textContent = t('generating_program');
   btn.disabled = true;
   const r = await api('POST', '/api/training/program/generate', null, 600000);
   if (r.success) {
     await loadMain();
   } else {
-    btn.textContent = 'TRY AGAIN';
+    btn.textContent = t('try_again');
     btn.disabled = false;
   }
 }
@@ -941,6 +941,7 @@ const TRANSLATIONS = {
     insights_ready: '✓ Exercise Insights Ready',
     generate_insights: 'GENERATE EXERCISE INSIGHTS',
     generating_insights: 'GENERATING INSIGHTS...',
+    generating_program: 'GENERATING...',
     no_program: 'No Program Yet',
     no_program_body: 'Generate your personalized training program first.',
     generate_program: 'GENERATE PROGRAM',
@@ -989,6 +990,7 @@ const TRANSLATIONS = {
     insights_ready: '✓ Інсайти готові',
     generate_insights: 'ЗГЕНЕРУВАТИ ІНСАЙТИ',
     generating_insights: 'ГЕНЕРУЄМО ІНСАЙТИ...',
+    generating_program: 'ГЕНЕРУЄМО...',
     no_program: 'Програми ще немає',
     no_program_body: 'Спочатку згенеруй персоналізовану програму тренувань.',
     generate_program: 'ЗГЕНЕРУВАТИ ПРОГРАМУ',
@@ -1066,7 +1068,7 @@ function toggleInsightsVisibility() {
   const content = document.getElementById('program-content');
   if (content) content.classList.toggle('insights-hidden', !_showInsights);
   const btn = document.getElementById('insights-toggle-btn');
-  if (btn) btn.textContent = _showInsights ? 'HIDE INSIGHTS' : 'SHOW INSIGHTS';
+  if (btn) btn.textContent = t(_showInsights ? 'hide_insights' : 'show_insights');
 }
 
 async function loadProgramTab() {
