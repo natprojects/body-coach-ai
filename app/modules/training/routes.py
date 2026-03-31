@@ -333,7 +333,7 @@ def _serialize_program_full(program):
     from datetime import date
     from .models import WorkoutExercise, Workout, ProgramWeek
     days_elapsed = (date.today() - program.created_at.date()).days
-    current_week = (days_elapsed // 7) + 1
+    current_week = min((days_elapsed // 7) + 1, program.total_weeks)
 
     total_wes = (WorkoutExercise.query
                  .join(Workout).join(ProgramWeek).join(Mesocycle)
