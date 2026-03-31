@@ -199,7 +199,7 @@ def generate_exercise_insights(program, user) -> int:
         "expected_outcome, modifications_applied"
     )
 
-    raw = complete(system_prompt, user_prompt, max_tokens=4096, model='claude-sonnet-4-6')
+    raw = complete(system_prompt, user_prompt, max_tokens=8192, model='claude-sonnet-4-6')
     raw = re.sub(r'^```(?:json)?\s*', '', raw.strip())
     raw = re.sub(r'\s*```$', '', raw).strip()
 

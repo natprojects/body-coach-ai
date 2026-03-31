@@ -17,5 +17,8 @@ with app.app_context():
         user = User.query.get(p.user_id)
         lang = getattr(user, 'app_language', 'en') or 'en'
         print(f'Regenerating insights for program {p.id}, user lang={lang}')
-        count = generate_exercise_insights(p, user)
-        print(f'Done: {count} exercises updated')
+        try:
+            count = generate_exercise_insights(p, user)
+            print(f'Done: {count} exercises updated')
+        except Exception as e:
+            print(f'ERROR: {e}', file=sys.stderr)
