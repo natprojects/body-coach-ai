@@ -273,7 +273,21 @@
     .day-block { margin-bottom: 6px; }
     .day-header { font-family: 'Barlow Condensed', sans-serif; font-size: 13px;
       font-weight: 700; text-transform: uppercase; letter-spacing: .1em;
-      color: var(--accent); padding: 6px 4px 4px; }
+      color: var(--accent); padding: 6px 4px 4px;
+      display: flex; justify-content: space-between; align-items: baseline; }
+    .day-duration { font-size: 11px; color: var(--muted); font-weight: 400;
+      letter-spacing: 0; text-transform: none; }
+    .day-muscles { font-size: 11px; color: var(--muted); padding: 0 4px 4px;
+      letter-spacing: .03em; }
+    .day-warmup { font-size: 12px; color: #8a9; padding: 4px 4px 6px;
+      line-height: 1.4; border-left: 2px solid #3a5a3a; margin: 0 4px 6px; padding-left: 8px; }
+    .warmup-label { font-weight: 600; text-transform: uppercase;
+      font-size: 10px; letter-spacing: .08em; }
+    .coaching-note { font-size: 12px; color: #7aa; font-style: italic;
+      padding: 2px 0 4px; line-height: 1.4; }
+    .tempo-badge { color: var(--muted); font-size: 11px; }
+    .optional-badge { font-size: 10px; color: var(--muted); font-weight: 400;
+      text-transform: none; letter-spacing: 0; }
     .prog-ex-row { padding: 8px 4px; border-bottom: 1px solid var(--border); }
     .prog-ex-row:last-child { border-bottom: none; }
     .prog-ex-name { font-family: 'Barlow Condensed', sans-serif; font-size: 15px;
@@ -1123,7 +1137,12 @@ function renderProgramTab() {
             <div class="week-body">
               ${w.workouts.map(wo => `
                 <div class="day-block">
-                  <div class="day-header">${DAY_NAMES[wo.day_of_week]} — ${_esc(wo.name)}</div>
+                  <div class="day-header">
+                    <span>${DAY_NAMES[wo.day_of_week]} — ${_esc(wo.name)}</span>
+                    ${wo.estimated_duration_min ? `<span class="day-duration">~${wo.estimated_duration_min} min</span>` : ''}
+                  </div>
+                  ${wo.target_muscle_groups ? `<div class="day-muscles">${_esc(wo.target_muscle_groups)}</div>` : ''}
+                  ${wo.warmup_notes ? `<div class="day-warmup"><span class="warmup-label">Warmup:</span> ${_esc(wo.warmup_notes)}</div>` : ''}
                   ${wo.exercises.map(ex => {
                     const setsStr = ex.sets.length > 0
                       ? `${ex.sets.length}×${ex.sets[0].target_reps} @${ex.sets[0].target_weight_kg}kg RPE${ex.sets[0].target_rpe}`
@@ -1147,8 +1166,9 @@ function renderProgramTab() {
                       </div>` : ''}` : '';
                     return `
                     <div class="prog-ex-row">
-                      <div class="prog-ex-name">${_esc(ex.exercise_name)}</div>
-                      <div class="prog-ex-sets">${_esc(setsStr)}</div>
+                      <div class="prog-ex-name">${_esc(ex.exercise_name)}${ex.is_mandatory === false ? ' <span class="optional-badge">optional</span>' : ''}</div>
+                      <div class="prog-ex-sets">${_esc(setsStr)}${ex.tempo ? ` · <span class="tempo-badge">⏱ ${_esc(ex.tempo)}</span>` : ''}</div>
+                      ${ex.coaching_notes ? `<div class="coaching-note">${_esc(ex.coaching_notes)}</div>` : ''}
                       ${insightHtml}
                     </div>`;
                   }).join('')}

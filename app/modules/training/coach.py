@@ -70,6 +70,9 @@ def save_program_from_dict(user_id: int, program_dict: dict) -> Program:
                     day_of_week=wo_data['day_of_week'],
                     name=wo_data['name'],
                     order_index=wo_data['order_index'],
+                    target_muscle_groups=wo_data.get('target_muscle_groups'),
+                    estimated_duration_min=wo_data.get('estimated_duration_min'),
+                    warmup_notes=wo_data.get('warmup_notes'),
                 )
                 db.session.add(workout)
                 db.session.flush()
@@ -80,7 +83,9 @@ def save_program_from_dict(user_id: int, program_dict: dict) -> Program:
                         workout_id=workout.id,
                         exercise_id=exercise.id,
                         order_index=ex_data['order_index'],
-                        notes=ex_data.get('notes'),
+                        notes=ex_data.get('coaching_notes') or ex_data.get('notes'),
+                        tempo=ex_data.get('tempo'),
+                        is_mandatory=ex_data.get('is_mandatory', True),
                     )
                     db.session.add(we)
                     db.session.flush()
@@ -118,11 +123,58 @@ STRICT OUTPUT CONSTRAINTS (mandatory, no exceptions):
 - Exactly 1 mesocycle
 - Exactly 1 week inside that mesocycle (week_number: 1) — this is the repeating template
 - Exactly {days} workouts in that week (one per training day)
-- Exactly 4 exercises per workout
+- 4-5 exercises per workout (compound first, isolation last)
 - Exactly 3 sets per exercise
-- All "notes" fields must be null
+Return ONLY the JSON object. No explanation.
 
-Return ONLY the JSON object. No explanation."""
+EXERCISE SELECTION RULES — APPLY TO EVERY PROGRAM GENERATION:
+
+1. CONTRAINDICATIONS CHECK:
+- Shoulder impingement → NO overhead press, NO upright row, NO behind-the-neck press. YES landmine press, YES neutral grip
+- Disc herniation → NO axial load during pain, NO weighted hyperextension, CAREFUL with flexion under load
+- Knee pain during squat → check depth, stance width, toe direction, ankle mobility
+
+2. ANTHROPOMETRY:
+- Long femurs + short torso → front squat or goblet better than back squat
+- Long arms → floor press may be safer than full ROM bench press
+- Wide hips → wider stance for squats and deadlifts
+
+3. MUSCLE IMBALANCES:
+- Anterior pelvic tilt → less hip flexor work, more glute activation and hamstring, iliopsoas stretching
+- Quad dominant → more hip hinge (RDL, hip thrust), less quad-dominant
+- Rounded shoulders → more rowing and face pulls, less chest press, pec minor stretching
+
+4. MOBILITY:
+- Limited dorsiflexion → heel elevation for squat, or goblet squat instead of barbell
+- Limited overhead mobility → landmine press instead of overhead press
+- Limited hip rotation → wider stance, possibly sumo instead of conventional
+
+5. REHAB PHASE (if injury present):
+- Acute (pain >5/10) → pain-free ROM only, isometrics, no load
+- Subacute (pain 3-5/10) → light load in pain-free ROM, eccentric focus
+- Chronic/remission (pain <3/10) → gradual return to full load
+- ALWAYS: if exercise causes pain >3/10 → stop, modify or replace
+
+6. HYPERTROPHY OPTIMIZATION (Schoenfeld 2023):
+For each muscle group include exercises covering:
+- Stretched position: flyes, incline curls, Romanian deadlift
+- Shortened position: cable crossover, leg curl, concentration curl
+- Multiple angles/force vectors
+
+7. CORRECTIVE EXERCISES — mandatory when imbalances present:
+- Anterior pelvic tilt → dead bug, glute bridge, plank
+- Rounded shoulders → band pull-apart, face pull, external rotation, prone Y-raise
+- Forward head → chin tuck, deep neck flexor activation
+Include 2-3 corrective exercises as the first items in the workout (order_index 0, 1, 2).
+
+PROGRAM STRUCTURE REQUIREMENTS:
+- Program name and type (hypertrophy / strength / deload / home)
+- Split type in program name (Push/Pull/Legs, Upper/Lower, Full Body)
+- Block duration 4-6 weeks (total_weeks field)
+- Every workout: target_muscle_groups, estimated_duration_min, warmup_notes specific to that day
+- Every exercise: tempo in "E-P-C-P" format (e.g. "3-1-2-0"), coaching_notes ("focus on stretch at bottom"), is_mandatory (true/false)
+- Compound exercises first, isolation last
+- Beginners: simpler movements, master basics. Intermediate/Advanced: periodization, advanced techniques."""
 
     user_prompt = f"""Create a training program for:
 - Name: {user.name}, Gender: {user.gender}, Age: {user.age}
@@ -134,12 +186,13 @@ Return ONLY the JSON object. No explanation."""
 - Current injuries: {user.injuries_current}
 - Postural issues: {user.postural_issues}
 - Mobility issues: {user.mobility_issues}
+- Muscle imbalances: {user.muscle_imbalances}
 - Likes: {user.training_likes}, Dislikes: {user.training_dislikes}
 
 JSON structure:
-{{"name":"...","periodization_type":"linear","total_weeks":8,"mesocycles":[{{"name":"Accumulation","order_index":0,"weeks_count":8,"weeks":[{{"week_number":1,"notes":null,"workouts":[{{"day_of_week":0,"name":"...","order_index":0,"exercises":[{{"exercise_name":"...","order_index":0,"notes":null,"sets":[{{"set_number":1,"target_reps":"8-10","target_weight_kg":60.0,"target_rpe":7.0,"rest_seconds":90}}]}}]}}]}}]}}]}}
+{{"name":"...","periodization_type":"hypertrophy","total_weeks":6,"mesocycles":[{{"name":"Accumulation","order_index":0,"weeks_count":6,"weeks":[{{"week_number":1,"notes":null,"workouts":[{{"day_of_week":0,"name":"Push A","order_index":0,"target_muscle_groups":"Chest, Triceps, Shoulders","estimated_duration_min":60,"warmup_notes":"...","exercises":[{{"exercise_name":"...","order_index":0,"tempo":"3-1-2-0","is_mandatory":true,"coaching_notes":"...","sets":[{{"set_number":1,"target_reps":"8-10","target_weight_kg":60.0,"target_rpe":7.0,"rest_seconds":90}}]}}]}}]}}]}}]}}
 
-Use day_of_week 0=Mon,1=Tue,2=Wed,3=Thu,4=Fri,5=Sat,6=Sun. Respect injuries/mobility."""
+Use day_of_week 0=Mon,1=Tue,2=Wed,3=Thu,4=Fri,5=Sat,6=Sun."""
 
     result = complete(system_prompt, user_prompt, max_tokens=8192, model='claude-sonnet-4-6')
     # Strip markdown code fences that the model sometimes wraps around JSON

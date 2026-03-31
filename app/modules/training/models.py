@@ -46,6 +46,9 @@ class Workout(db.Model):
     day_of_week = db.Column(db.Integer, nullable=False)  # 0=Mon ... 6=Sun
     name = db.Column(db.String(200), nullable=False)
     order_index = db.Column(db.Integer, nullable=False)
+    target_muscle_groups = db.Column(db.String(200))
+    estimated_duration_min = db.Column(db.Integer)
+    warmup_notes = db.Column(db.Text)
 
     workout_exercises = db.relationship('WorkoutExercise', backref='workout',
                                         order_by='WorkoutExercise.order_index',
@@ -75,6 +78,8 @@ class WorkoutExercise(db.Model):
     exercise_id = db.Column(db.Integer, db.ForeignKey('exercises.id'), nullable=False)
     order_index = db.Column(db.Integer, nullable=False)
     notes = db.Column(db.Text)
+    tempo = db.Column(db.String(20))
+    is_mandatory = db.Column(db.Boolean, default=True)
     selection_reason = db.Column(db.Text)
     expected_outcome = db.Column(db.Text)
     modifications_applied = db.Column(db.Text)
