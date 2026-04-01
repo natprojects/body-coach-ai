@@ -782,6 +782,9 @@ const S = {
   obSteps: [],
   obIndex: 0,
   obData: {},
+  coachThreads: [],
+  activeThread: null,
+  coachStreaming: false,
 };
 
 const RPE_LABELS = {5: 'Легко', 7: 'Нормально', 8: 'Важко', 9: 'На межі'};
@@ -1572,6 +1575,7 @@ function switchTab(name) {
   document.getElementById(`panel-${name}`).classList.add('active');
   haptic();
   if (name === 'program') loadProgramTab();
+  if (name === 'coach') loadCoachTab();
 }
 
 // ── SESSION ──
@@ -1994,6 +1998,117 @@ async function openWeeklyReport() {
   document.getElementById('feedback-text').innerHTML = r.success
     ? parseTechniqueMarkdown(r.data.report)
     : '<span style="color:var(--muted)">Не вдалося завантажити звіт</span>';
+}
+
+// ── COACH ──
+
+async function loadCoachTab() {
+  const r = await api('GET', '/api/coach/threads');
+  S.coachThreads = r.success ? r.data : [];
+  renderCoachList();
+}
+
+function renderCoachList() {
+  const container = document.getElementById('coach-threads-container');
+  if (!container) return;
+  if (!S.coachThreads.length) {
+    container.innerHTML = `<div class="coach-empty">
+      <div class="coach-empty-title">Твій AI коач</div>
+      <div class="coach-empty-sub">Техніка вправ · Програма · Відновлення<br>Харчування · Сон · Мотивація</div>
+      <button class="btn btn-primary" onclick="newCoachThread()">ПОЧАТИ РОЗМОВУ</button>
+    </div>`;
+    return;
+  }
+  container.innerHTML = S.coachThreads.map(t => `
+    <div class="coach-thread-card" id="tc-${t.id}" onclick="openCoachThread(${t.id})">
+      <div class="coach-thread-card-title">${_esc(t.title)}</div>
+      <div style="display:flex;align-items:center;gap:6px">
+        <span class="coach-thread-card-date">${_coachRelDate(t.updated_at)}</span>
+        <button class="coach-del-btn" id="cdel-${t.id}"
+          onclick="event.stopPropagation();deleteCoachThread(${t.id})">✕</button>
+      </div>
+    </div>`).join('');
+
+  // Long-press to reveal delete button
+  container.querySelectorAll('.coach-thread-card').forEach(card => {
+    let timer;
+    card.addEventListener('touchstart', () => {
+      timer = setTimeout(() => {
+        const id = card.id.replace('tc-', '');
+        const btn = document.getElementById('cdel-' + id);
+        if (btn) btn.style.display = 'block';
+      }, 500);
+    });
+    card.addEventListener('touchend', () => clearTimeout(timer));
+    card.addEventListener('touchmove', () => clearTimeout(timer));
+  });
+}
+
+function _coachRelDate(isoStr) {
+  const d = new Date(isoStr);
+  const diffH = Math.floor((Date.now() - d) / 3600000);
+  if (diffH < 1) return 'щойно';
+  if (diffH < 24) return diffH + ' год тому';
+  const diffD = Math.floor(diffH / 24);
+  if (diffD === 1) return 'вчора';
+  return diffD + ' дн тому';
+}
+
+async function newCoachThread() {
+  haptic();
+  const r = await api('POST', '/api/coach/threads');
+  if (!r.success) return;
+  S.activeThread = {id: r.data.thread_id, title: 'Нова розмова', messages: []};
+  _showCoachThread();
+}
+
+async function openCoachThread(id) {
+  haptic();
+  const r = await api('GET', `/api/coach/threads/${id}`);
+  if (!r.success) { loadCoachTab(); return; }
+  S.activeThread = r.data;
+  _showCoachThread();
+  _renderCoachMessages();
+  const msgs = document.getElementById('coach-messages');
+  if (msgs) msgs.scrollTop = msgs.scrollHeight;
+}
+
+function showCoachList() {
+  document.getElementById('coach-thread-view').style.display = 'none';
+  document.getElementById('coach-list-view').style.display = 'flex';
+  loadCoachTab();
+}
+
+function _showCoachThread() {
+  document.getElementById('coach-list-view').style.display = 'none';
+  const tv = document.getElementById('coach-thread-view');
+  tv.style.display = 'flex';
+  document.getElementById('coach-thread-title-text').textContent =
+    (S.activeThread.title || 'Нова розмова').slice(0, 40);
+  document.getElementById('coach-messages').innerHTML = '';
+  document.getElementById('coach-input').value = '';
+  _setupCoachInput();
+}
+
+function _setupCoachInput() {
+  const input = document.getElementById('coach-input');
+  if (!input || input._coachSetup) return;
+  input._coachSetup = true;
+  input.addEventListener('input', function() {
+    this.style.height = 'auto';
+    this.style.height = Math.min(this.scrollHeight, 110) + 'px';
+  });
+  input.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendCoachMessage(); }
+  });
+}
+
+async function deleteCoachThread(id) {
+  if (!confirm('Видалити розмову?')) return;
+  haptic();
+  await api('DELETE', `/api/coach/threads/${id}`);
+  S.coachThreads = S.coachThreads.filter(t => t.id !== id);
+  renderCoachList();
 }
 
 function confirmLeaveSession() {
