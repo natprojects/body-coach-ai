@@ -21,6 +21,14 @@ def _h(app, user_id):
     return {'Authorization': f'Bearer {create_jwt(user_id, app.config["SECRET_KEY"])}'}
 
 
+def test_build_coach_context_returns_string(app, db):
+    user = _make_user(db)
+    from app.modules.coach.context import build_coach_context
+    ctx = build_coach_context(user.id)
+    assert isinstance(ctx, str)
+    assert len(ctx) > 50
+
+
 def test_models_exist(app, db):
     user = _make_user(db)
     thread = ChatThread(user_id=user.id)
