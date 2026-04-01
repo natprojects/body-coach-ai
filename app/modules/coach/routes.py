@@ -128,7 +128,7 @@ def thread_chat(thread_id):
         ) as stream:
             for text in stream.text_stream:
                 full_response.append(text)
-                yield f'data: {text}\n\n'
+                yield f"data: {text.replace(chr(10), ' ')}\n\n"
 
         ai_content = ''.join(full_response)
         ai_msg = ChatMessage(thread_id=thread_id, role='assistant', content=ai_content)

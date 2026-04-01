@@ -20,7 +20,7 @@ class ChatThread(db.Model):
 class ChatMessage(db.Model):
     __tablename__ = 'chat_messages'
     id = db.Column(db.Integer, primary_key=True)
-    thread_id = db.Column(db.Integer, db.ForeignKey('chat_threads.id'), nullable=False)
+    thread_id = db.Column(db.Integer, db.ForeignKey('chat_threads.id'), nullable=False, index=True)
     role = db.Column(db.String(20), nullable=False)   # 'user' | 'assistant'
     content = db.Column(db.Text, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
