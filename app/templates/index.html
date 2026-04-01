@@ -2111,6 +2111,17 @@ async function deleteCoachThread(id) {
   renderCoachList();
 }
 
+function _renderCoachMessages() {
+  const container = document.getElementById('coach-messages');
+  if (!container || !S.activeThread) return;
+  container.innerHTML = (S.activeThread.messages || []).map(m => {
+    if (m.role === 'user') {
+      return `<div class="coach-msg-user"><span>${_esc(m.content)}</span></div>`;
+    }
+    return `<div class="coach-msg-ai">${parseTechniqueMarkdown(m.content)}</div>`;
+  }).join('');
+}
+
 function confirmLeaveSession() {
   if (confirm('Leave workout? Progress will be saved.')) {
     stopTimer();
