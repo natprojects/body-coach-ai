@@ -2122,6 +2122,93 @@ function _renderCoachMessages() {
   }).join('');
 }
 
+async function sendCoachMessage() {
+  const input = document.getElementById('coach-input');
+  const msg = (input.value || '').trim();
+  if (!msg || S.coachStreaming || !S.activeThread) return;
+
+  const isFirst = !(S.activeThread.messages?.length);
+
+  input.value = '';
+  input.style.height = 'auto';
+  const container = document.getElementById('coach-messages');
+
+  // Append user bubble immediately
+  const userBubble = document.createElement('div');
+  userBubble.className = 'coach-msg-user';
+  userBubble.innerHTML = `<span>${_esc(msg)}</span>`;
+  container.appendChild(userBubble);
+
+  // Append AI bubble with blinking cursor
+  const aiBubble = document.createElement('div');
+  aiBubble.className = 'coach-msg-ai';
+  aiBubble.innerHTML = '<span class="coach-cursor">▌</span>';
+  container.appendChild(aiBubble);
+  container.scrollTop = container.scrollHeight;
+
+  S.coachStreaming = true;
+  const sendBtn = document.getElementById('coach-send-btn');
+  sendBtn.disabled = true;
+
+  let aiText = '';
+
+  try {
+    const resp = await fetch(`/api/coach/threads/${S.activeThread.id}/chat`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(S.jwt ? {'Authorization': 'Bearer ' + S.jwt} : {}),
+      },
+      body: JSON.stringify({message: msg}),
+    });
+
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    while (true) {
+      const {done, value} = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, {stream: true});
+      const lines = buffer.split('\n');
+      buffer = lines.pop(); // keep incomplete last line
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        const chunk = line.slice(6);
+        if (chunk === '[DONE]') break;
+        aiText += chunk;
+        aiBubble.innerHTML = parseTechniqueMarkdown(aiText) + '<span class="coach-cursor">▌</span>';
+        container.scrollTop = container.scrollHeight;
+      }
+    }
+  } catch (e) {
+    aiText = 'Помилка з\'єднання. Спробуй ще раз.';
+  }
+
+  // Finalize bubble (remove cursor)
+  aiBubble.innerHTML = parseTechniqueMarkdown(aiText);
+  container.scrollTop = container.scrollHeight;
+
+  S.coachStreaming = false;
+  sendBtn.disabled = false;
+  haptic('light');
+
+  // Update local cache
+  if (!S.activeThread.messages) S.activeThread.messages = [];
+  S.activeThread.messages.push({role: 'user', content: msg});
+  S.activeThread.messages.push({role: 'assistant', content: aiText});
+
+  // Generate title after first exchange
+  if (isFirst) {
+    const titleR = await api('POST', `/api/coach/threads/${S.activeThread.id}/generate-title`);
+    if (titleR.success && titleR.data?.title) {
+      S.activeThread.title = titleR.data.title;
+      document.getElementById('coach-thread-title-text').textContent =
+        titleR.data.title.slice(0, 40);
+    }
+  }
+}
+
 function confirmLeaveSession() {
   if (confirm('Leave workout? Progress will be saved.')) {
     stopTimer();
