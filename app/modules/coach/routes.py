@@ -2,9 +2,11 @@ from datetime import datetime
 
 from flask import Response, g, jsonify, request, stream_with_context
 
+from app.core.ai import get_client
 from app.core.auth import require_auth
 from app.extensions import db
 from . import bp
+from .context import COACH_SYSTEM, build_coach_context
 from .models import ChatMessage, ChatThread
 
 
@@ -84,3 +86,60 @@ def generate_title(thread_id):
     thread.title = raw
     db.session.commit()
     return jsonify({'success': True, 'data': {'title': raw}})
+
+
+@bp.route('/coach/threads/<int:thread_id>/chat', methods=['POST'])
+@require_auth
+def thread_chat(thread_id):
+    thread = ChatThread.query.filter_by(id=thread_id, user_id=g.user_id).first()
+    if not thread:
+        return jsonify({'success': False, 'error': {'code': 'NOT_FOUND', 'message': 'Thread not found'}}), 404
+
+    data = request.json or {}
+    user_message = (data.get('message') or '').strip()
+    if not user_message:
+        return jsonify({'success': False, 'error': {'code': 'EMPTY', 'message': 'Message required'}}), 400
+
+    # Save user message
+    user_msg = ChatMessage(thread_id=thread_id, role='user', content=user_message)
+    db.session.add(user_msg)
+    thread.updated_at = datetime.utcnow()
+    db.session.commit()
+
+    # Build conversation history (last 49 messages before this one)
+    history_msgs = (ChatMessage.query
+                    .filter(ChatMessage.thread_id == thread_id,
+                            ChatMessage.id != user_msg.id)
+                    .order_by(ChatMessage.created_at.desc())
+                    .limit(49)
+                    .all())[::-1]
+    messages = [{'role': m.role, 'content': m.content} for m in history_msgs]
+    messages.append({'role': 'user', 'content': user_message})
+
+    system = COACH_SYSTEM + '\n\n' + build_coach_context(g.user_id)
+
+    # Collect AI response synchronously so the assistant message is saved
+    # before the HTTP response is returned (required for testability and
+    # to avoid context lifecycle issues with stream_with_context).
+    chunks = []
+    with get_client().messages.stream(
+        model='claude-sonnet-4-6',
+        max_tokens=2048,
+        system=system,
+        messages=messages,
+    ) as stream:
+        for text in stream.text_stream:
+            chunks.append(text)
+
+    ai_content = ''.join(chunks)
+    ai_msg = ChatMessage(thread_id=thread_id, role='assistant', content=ai_content)
+    db.session.add(ai_msg)
+    thread.updated_at = datetime.utcnow()
+    db.session.commit()
+
+    def generate():
+        for chunk in chunks:
+            yield f'data: {chunk}\n\n'
+        yield 'data: [DONE]\n\n'
+
+    return Response(generate(), mimetype='text/event-stream')

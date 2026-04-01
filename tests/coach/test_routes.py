@@ -1,5 +1,6 @@
 import pytest
 from datetime import datetime
+from unittest.mock import MagicMock, patch
 from app.core.models import User
 from app.core.auth import create_jwt
 from app.modules.coach.models import ChatMessage, ChatThread
@@ -113,3 +114,31 @@ def test_cannot_access_other_users_thread(client, app, db):
 
     resp = client.get(f'/api/coach/threads/{thread_id}', headers=_h(app, user2.id))
     assert resp.status_code == 404
+
+
+def test_chat_saves_messages(client, app, db):
+    user = _make_user(db)
+    h = _h(app, user.id)
+
+    thread_id = client.post('/api/coach/threads', headers=h, json={}).get_json()['data']['thread_id']
+
+    mock_stream = MagicMock()
+    mock_stream.__enter__ = lambda s: s
+    mock_stream.__exit__ = MagicMock(return_value=False)
+    mock_stream.text_stream = iter(['Hello', ' there'])
+
+    with patch('app.modules.coach.routes.get_client') as mock_get_client:
+        mock_get_client.return_value.messages.stream.return_value = mock_stream
+        resp = client.post(
+            f'/api/coach/threads/{thread_id}/chat',
+            headers=h,
+            json={'message': 'Як покращити техніку присідань?'},
+        )
+    assert resp.status_code == 200
+
+    msgs = ChatMessage.query.filter_by(thread_id=thread_id).order_by(ChatMessage.created_at).all()
+    assert len(msgs) == 2
+    assert msgs[0].role == 'user'
+    assert msgs[0].content == 'Як покращити техніку присідань?'
+    assert msgs[1].role == 'assistant'
+    assert msgs[1].content == 'Hello there'
