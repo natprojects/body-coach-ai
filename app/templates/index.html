@@ -267,6 +267,67 @@
     .ex-action-btn:last-child { border-right: none; }
     .ex-action-btn:active { color: var(--accent); }
 
+    /* ── COACH TAB ── */
+    #panel-coach { overflow: hidden; padding: 0; gap: 0; }
+    #coach-list-view { display: flex; flex-direction: column; height: 100%; overflow: hidden; }
+    #coach-thread-view { display: none; flex-direction: column; height: 100%; overflow: hidden; }
+
+    .coach-list-header { display: flex; justify-content: space-between; align-items: center;
+      padding: 14px 16px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+    .coach-list-title { font-family: 'Barlow Condensed', sans-serif; font-size: 18px;
+      font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
+    .coach-new-btn { background: none; border: 1px solid var(--border); border-radius: 4px;
+      color: var(--accent); font-size: 15px; padding: 5px 10px; cursor: pointer; }
+    .coach-new-btn:active { border-color: var(--accent); }
+
+    #coach-threads-container { flex: 1; overflow-y: auto; }
+    .coach-thread-card { padding: 14px 16px; border-bottom: 1px solid var(--border);
+      cursor: pointer; display: flex; justify-content: space-between; align-items: center; }
+    .coach-thread-card:active { background: var(--card); }
+    .coach-thread-card-title { font-size: 14px; color: var(--text); }
+    .coach-thread-card-date { font-size: 11px; color: var(--muted); flex-shrink: 0; margin-left: 12px; }
+    .coach-del-btn { background: none; border: none; color: #ff4444; font-size: 14px;
+      padding: 4px 8px; cursor: pointer; display: none; }
+
+    .coach-empty { display: flex; flex-direction: column; align-items: center;
+      justify-content: center; padding: 60px 32px; text-align: center; flex: 1; }
+    .coach-empty-title { font-family: 'Barlow Condensed', sans-serif; font-size: 20px;
+      font-weight: 700; text-transform: uppercase; margin-bottom: 8px; }
+    .coach-empty-sub { font-size: 13px; color: var(--muted); margin-bottom: 24px; line-height: 1.5; }
+
+    .coach-thread-header { display: flex; align-items: center; gap: 10px; padding: 10px 14px;
+      border-bottom: 1px solid var(--border); flex-shrink: 0; }
+    .coach-back-btn { background: none; border: none; color: var(--accent); font-size: 20px;
+      cursor: pointer; padding: 4px 6px; line-height: 1; }
+    .coach-thread-title-text { font-family: 'Barlow Condensed', sans-serif; font-size: 15px;
+      font-weight: 700; text-transform: uppercase; letter-spacing: .06em; flex: 1;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+    .coach-messages { flex: 1; overflow-y: auto; padding: 14px 14px 8px;
+      display: flex; flex-direction: column; gap: 10px; }
+    .coach-msg-user { align-self: flex-end; background: var(--accent); color: #fff;
+      padding: 10px 14px; border-radius: 16px 16px 4px 16px; max-width: 82%;
+      font-size: 14px; line-height: 1.5; word-break: break-word; }
+    .coach-msg-ai { align-self: flex-start; background: var(--card);
+      border: 1px solid var(--border); padding: 12px 14px;
+      border-radius: 4px 16px 16px 16px; max-width: 92%;
+      font-size: 14px; line-height: 1.6; word-break: break-word; }
+
+    .coach-input-area { display: flex; align-items: flex-end; gap: 8px;
+      padding: 8px 12px 10px; border-top: 1px solid var(--border); flex-shrink: 0; }
+    #coach-input { flex: 1; background: var(--card); border: 1px solid var(--border);
+      border-radius: 20px; color: var(--text); font-family: 'DM Sans', sans-serif;
+      font-size: 14px; padding: 9px 16px; outline: none; resize: none;
+      max-height: 110px; overflow-y: auto; line-height: 1.45; }
+    #coach-input:focus { border-color: var(--accent); }
+    .coach-send-btn { width: 38px; height: 38px; background: var(--accent); border: none;
+      border-radius: 50%; color: #fff; font-size: 17px; cursor: pointer; flex-shrink: 0;
+      display: flex; align-items: center; justify-content: center; transition: opacity .15s; }
+    .coach-send-btn:disabled { opacity: .35; cursor: default; }
+
+    @keyframes blink { 0%,100%{opacity:1}50%{opacity:0} }
+    .coach-cursor { display: inline-block; animation: blink 1s infinite; }
+
     /* ── MISC ── */
     .divider { height: 1px; background: var(--border); margin: 8px 0; }
     .error-msg { color: #ff4444; font-size: 13px; text-align: center; margin-top: 8px; }
@@ -511,7 +572,26 @@
       <div class="coming-soon"><div class="cs-line"></div><div class="cs-text">Sleep</div><div class="cs-line"></div></div>
     </div>
     <div class="tab-panel" id="panel-coach">
-      <div class="coming-soon"><div class="cs-line"></div><div class="cs-text">Coach</div><div class="cs-line"></div></div>
+      <!-- Thread list view -->
+      <div id="coach-list-view">
+        <div class="coach-list-header">
+          <span class="coach-list-title">Coach</span>
+          <button class="coach-new-btn" onclick="newCoachThread()">✏</button>
+        </div>
+        <div id="coach-threads-container"></div>
+      </div>
+      <!-- Thread view -->
+      <div id="coach-thread-view">
+        <div class="coach-thread-header">
+          <button class="coach-back-btn" onclick="showCoachList()">←</button>
+          <span class="coach-thread-title-text" id="coach-thread-title-text">Coach</span>
+        </div>
+        <div class="coach-messages" id="coach-messages"></div>
+        <div class="coach-input-area">
+          <textarea id="coach-input" placeholder="Запитай свого коача..." rows="1"></textarea>
+          <button class="coach-send-btn" id="coach-send-btn" onclick="sendCoachMessage()">↑</button>
+        </div>
+      </div>
     </div>
   </div>
   <nav class="bottom-nav">
@@ -702,6 +782,9 @@ const S = {
   obSteps: [],
   obIndex: 0,
   obData: {},
+  coachThreads: [],
+  activeThread: null,
+  coachStreaming: false,
 };
 
 const RPE_LABELS = {5: 'Легко', 7: 'Нормально', 8: 'Важко', 9: 'На межі'};
@@ -1492,6 +1575,7 @@ function switchTab(name) {
   document.getElementById(`panel-${name}`).classList.add('active');
   haptic();
   if (name === 'program') loadProgramTab();
+  if (name === 'coach') loadCoachTab();
 }
 
 // ── SESSION ──
@@ -1914,6 +1998,215 @@ async function openWeeklyReport() {
   document.getElementById('feedback-text').innerHTML = r.success
     ? parseTechniqueMarkdown(r.data.report)
     : '<span style="color:var(--muted)">Не вдалося завантажити звіт</span>';
+}
+
+// ── COACH ──
+
+async function loadCoachTab() {
+  const r = await api('GET', '/api/coach/threads');
+  S.coachThreads = r.success ? r.data : [];
+  renderCoachList();
+}
+
+function renderCoachList() {
+  const container = document.getElementById('coach-threads-container');
+  if (!container) return;
+  if (!S.coachThreads.length) {
+    container.innerHTML = `<div class="coach-empty">
+      <div class="coach-empty-title">Твій AI коач</div>
+      <div class="coach-empty-sub">Техніка вправ · Програма · Відновлення<br>Харчування · Сон · Мотивація</div>
+      <button class="btn btn-primary" onclick="newCoachThread()">ПОЧАТИ РОЗМОВУ</button>
+    </div>`;
+    return;
+  }
+  container.innerHTML = S.coachThreads.map(t => `
+    <div class="coach-thread-card" id="tc-${t.id}" onclick="openCoachThread(${t.id})">
+      <div class="coach-thread-card-title">${_esc(t.title)}</div>
+      <div style="display:flex;align-items:center;gap:6px">
+        <span class="coach-thread-card-date">${_coachRelDate(t.updated_at)}</span>
+        <button class="coach-del-btn" id="cdel-${t.id}"
+          onclick="event.stopPropagation();deleteCoachThread(${t.id})">✕</button>
+      </div>
+    </div>`).join('');
+
+  // Long-press to reveal delete button
+  container.querySelectorAll('.coach-thread-card').forEach(card => {
+    let timer;
+    card.addEventListener('touchstart', () => {
+      timer = setTimeout(() => {
+        const id = card.id.replace('tc-', '');
+        const btn = document.getElementById('cdel-' + id);
+        if (btn) btn.style.display = 'block';
+      }, 500);
+    });
+    card.addEventListener('touchend', () => clearTimeout(timer));
+    card.addEventListener('touchmove', () => clearTimeout(timer));
+  });
+}
+
+function _coachRelDate(isoStr) {
+  const d = new Date(isoStr);
+  const diffH = Math.floor((Date.now() - d) / 3600000);
+  if (diffH < 1) return 'щойно';
+  if (diffH < 24) return diffH + ' год тому';
+  const diffD = Math.floor(diffH / 24);
+  if (diffD === 1) return 'вчора';
+  return diffD + ' дн тому';
+}
+
+async function newCoachThread() {
+  haptic();
+  const r = await api('POST', '/api/coach/threads');
+  if (!r.success) return;
+  S.activeThread = {id: r.data.thread_id, title: 'Нова розмова', messages: []};
+  _showCoachThread();
+}
+
+async function openCoachThread(id) {
+  haptic();
+  const r = await api('GET', `/api/coach/threads/${id}`);
+  if (!r.success) { loadCoachTab(); return; }
+  S.activeThread = r.data;
+  _showCoachThread();
+  _renderCoachMessages();
+  const msgs = document.getElementById('coach-messages');
+  if (msgs) msgs.scrollTop = msgs.scrollHeight;
+}
+
+function showCoachList() {
+  document.getElementById('coach-thread-view').style.display = 'none';
+  document.getElementById('coach-list-view').style.display = 'flex';
+  loadCoachTab();
+}
+
+function _showCoachThread() {
+  document.getElementById('coach-list-view').style.display = 'none';
+  const tv = document.getElementById('coach-thread-view');
+  tv.style.display = 'flex';
+  document.getElementById('coach-thread-title-text').textContent =
+    (S.activeThread.title || 'Нова розмова').slice(0, 40);
+  document.getElementById('coach-messages').innerHTML = '';
+  document.getElementById('coach-input').value = '';
+  _setupCoachInput();
+}
+
+function _setupCoachInput() {
+  const input = document.getElementById('coach-input');
+  if (!input || input._coachSetup) return;
+  input._coachSetup = true;
+  input.addEventListener('input', function() {
+    this.style.height = 'auto';
+    this.style.height = Math.min(this.scrollHeight, 110) + 'px';
+  });
+  input.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendCoachMessage(); }
+  });
+}
+
+async function deleteCoachThread(id) {
+  if (!confirm('Видалити розмову?')) return;
+  haptic();
+  await api('DELETE', `/api/coach/threads/${id}`);
+  S.coachThreads = S.coachThreads.filter(t => t.id !== id);
+  renderCoachList();
+}
+
+function _renderCoachMessages() {
+  const container = document.getElementById('coach-messages');
+  if (!container || !S.activeThread) return;
+  container.innerHTML = (S.activeThread.messages || []).map(m => {
+    if (m.role === 'user') {
+      return `<div class="coach-msg-user"><span>${_esc(m.content)}</span></div>`;
+    }
+    return `<div class="coach-msg-ai">${parseTechniqueMarkdown(m.content)}</div>`;
+  }).join('');
+}
+
+async function sendCoachMessage() {
+  const input = document.getElementById('coach-input');
+  const msg = (input.value || '').trim();
+  if (!msg || S.coachStreaming || !S.activeThread) return;
+
+  const isFirst = !(S.activeThread.messages?.length);
+
+  input.value = '';
+  input.style.height = 'auto';
+  const container = document.getElementById('coach-messages');
+
+  // Append user bubble immediately
+  const userBubble = document.createElement('div');
+  userBubble.className = 'coach-msg-user';
+  userBubble.innerHTML = `<span>${_esc(msg)}</span>`;
+  container.appendChild(userBubble);
+
+  // Append AI bubble with blinking cursor
+  const aiBubble = document.createElement('div');
+  aiBubble.className = 'coach-msg-ai';
+  aiBubble.innerHTML = '<span class="coach-cursor">▌</span>';
+  container.appendChild(aiBubble);
+  container.scrollTop = container.scrollHeight;
+
+  S.coachStreaming = true;
+  const sendBtn = document.getElementById('coach-send-btn');
+  sendBtn.disabled = true;
+
+  let aiText = '';
+
+  try {
+    const resp = await fetch(`/api/coach/threads/${S.activeThread.id}/chat`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(S.jwt ? {'Authorization': 'Bearer ' + S.jwt} : {}),
+      },
+      body: JSON.stringify({message: msg}),
+    });
+
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    while (true) {
+      const {done, value} = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, {stream: true});
+      const lines = buffer.split('\n');
+      buffer = lines.pop(); // keep incomplete last line
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        const chunk = line.slice(6);
+        if (chunk === '[DONE]') break;
+        aiText += chunk;
+        aiBubble.innerHTML = parseTechniqueMarkdown(aiText) + '<span class="coach-cursor">▌</span>';
+        container.scrollTop = container.scrollHeight;
+      }
+    }
+  } catch (e) {
+    aiText = 'Помилка з\'єднання. Спробуй ще раз.';
+  }
+
+  // Finalize bubble (remove cursor)
+  aiBubble.innerHTML = parseTechniqueMarkdown(aiText);
+  container.scrollTop = container.scrollHeight;
+
+  S.coachStreaming = false;
+  sendBtn.disabled = false;
+  haptic('light');
+
+  // Update local cache
+  if (!S.activeThread.messages) S.activeThread.messages = [];
+  S.activeThread.messages.push({role: 'user', content: msg});
+  S.activeThread.messages.push({role: 'assistant', content: aiText});
+
+  // Generate title after first exchange
+  if (isFirst) {
+    const titleR = await api('POST', `/api/coach/threads/${S.activeThread.id}/generate-title`);
+    if (titleR.success && titleR.data?.title) {
+      S.activeThread.title = titleR.data.title;
+      document.getElementById('coach-thread-title-text').textContent =
+        titleR.data.title.slice(0, 40);
+    }
+  }
 }
 
 function confirmLeaveSession() {
