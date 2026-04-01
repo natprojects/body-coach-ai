@@ -135,6 +135,8 @@ def test_chat_saves_messages(client, app, db):
             json={'message': 'Як покращити техніку присідань?'},
         )
     assert resp.status_code == 200
+    # Consume the SSE response body to force the generator to run to completion
+    _ = resp.data
 
     msgs = ChatMessage.query.filter_by(thread_id=thread_id).order_by(ChatMessage.created_at).all()
     assert len(msgs) == 2

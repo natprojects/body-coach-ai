@@ -118,28 +118,24 @@ def thread_chat(thread_id):
 
     system = COACH_SYSTEM + '\n\n' + build_coach_context(g.user_id)
 
-    # Collect AI response synchronously so the assistant message is saved
-    # before the HTTP response is returned (required for testability and
-    # to avoid context lifecycle issues with stream_with_context).
-    chunks = []
-    with get_client().messages.stream(
-        model='claude-sonnet-4-6',
-        max_tokens=2048,
-        system=system,
-        messages=messages,
-    ) as stream:
-        for text in stream.text_stream:
-            chunks.append(text)
-
-    ai_content = ''.join(chunks)
-    ai_msg = ChatMessage(thread_id=thread_id, role='assistant', content=ai_content)
-    db.session.add(ai_msg)
-    thread.updated_at = datetime.utcnow()
-    db.session.commit()
-
     def generate():
-        for chunk in chunks:
-            yield f'data: {chunk}\n\n'
+        full_response = []
+        with get_client().messages.stream(
+            model='claude-sonnet-4-6',
+            max_tokens=2048,
+            system=system,
+            messages=messages,
+        ) as stream:
+            for text in stream.text_stream:
+                full_response.append(text)
+                yield f'data: {text}\n\n'
+
+        ai_content = ''.join(full_response)
+        ai_msg = ChatMessage(thread_id=thread_id, role='assistant', content=ai_content)
+        db.session.add(ai_msg)
+        thread.updated_at = datetime.utcnow()
+        db.session.commit()
+
         yield 'data: [DONE]\n\n'
 
-    return Response(generate(), mimetype='text/event-stream')
+    return Response(stream_with_context(generate()), mimetype='text/event-stream')
