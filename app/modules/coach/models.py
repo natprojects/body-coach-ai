@@ -8,7 +8,7 @@ class ChatThread(db.Model):
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     title = db.Column(db.String(200), nullable=False, default='Нова розмова')
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     messages = db.relationship(
         'ChatMessage', backref='thread',
