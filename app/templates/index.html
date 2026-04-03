@@ -268,6 +268,13 @@
     .ex-action-btn:active { color: var(--accent); }
 
     /* ── COACH TAB ── */
+    .coach-md-header { font-weight: 700; font-size: 14px; color: var(--text);
+      margin: 14px 0 5px; line-height: 1.4; }
+    .coach-md-header:first-child { margin-top: 0; }
+    .coach-md-bullet { display: flex; gap: 7px; font-size: 14px; color: #ccc;
+      margin-bottom: 5px; line-height: 1.55; }
+    .coach-md-bullet-dot { color: var(--accent); flex-shrink: 0; }
+    .coach-md-text { font-size: 14px; color: #ccc; margin-bottom: 5px; line-height: 1.6; }
     #panel-coach { overflow: hidden; padding: 0; gap: 0; }
     #coach-list-view { display: flex; flex-direction: column; height: 100%; overflow: hidden; }
     #coach-thread-view { display: none; flex-direction: column; height: 100%; overflow: hidden; }
@@ -483,6 +490,8 @@
       font-weight: 700; text-transform: uppercase; }
     .next-plan-target { font-size: 12px; color: var(--muted); }
     .next-plan-reason { font-size: 11px; color: #888; font-style: italic; }
+    .rec-card { background: var(--card); border: 1px solid var(--border);
+      border-radius: 8px; padding: 10px 12px; margin-bottom: 8px; }
   </style>
 </head>
 <body>
@@ -1935,6 +1944,27 @@ function parseTechniqueMarkdown(text) {
   return html;
 }
 
+function parseCoachMarkdown(text) {
+  const lines = text.split('\n');
+  let html = '';
+  for (const raw of lines) {
+    const line = raw.trim();
+    if (!line) { html += '<div style="height:6px"></div>'; continue; }
+    const inline = t => _esc(t)
+      .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+      .replace(/\*\*/g, '')
+      .replace(/#{1,3}\s?/g, '');
+    if (/^#{1,3}\s/.test(line)) {
+      html += `<div class="coach-md-header">${inline(line.replace(/^#{1,3}\s*/, ''))}</div>`;
+    } else if (/^[-•*]\s/.test(line)) {
+      html += `<div class="coach-md-bullet"><span class="coach-md-bullet-dot">▸</span><span>${inline(line.replace(/^[-•*]\s*/, ''))}</span></div>`;
+    } else {
+      html += `<div class="coach-md-text">${inline(line)}</div>`;
+    }
+  }
+  return html;
+}
+
 function openTechnique(exerciseId, exName) {
   document.getElementById('technique-ex-name').textContent = exName;
   const body = document.getElementById('technique-body');
@@ -1950,6 +1980,8 @@ async function completeWorkout() {
   haptic('heavy');
   stopTimer();
   const r = await api('POST', '/api/training/session/complete', {session_id: S.sessionId});
+  S.sessionId = null;
+  S.pendingResume = null;
   showScreen('main');
   if (r.success) {
     if (r.data?.next_session_plan?.length) {
@@ -1971,21 +2003,43 @@ async function completeWorkout() {
 function renderNextSessionPlan() {
   const el = document.getElementById('next-session-plan');
   if (!el) return;
-  const plan = S.nextSessionPlan;
-  if (!plan?.length) { el.innerHTML = ''; return; }
-  const rows = plan.map(rec => {
-    const weightStr = rec.recommended_weight_kg ? `${rec.recommended_weight_kg}kg` : '';
-    const repsStr = (rec.recommended_reps_min && rec.recommended_reps_max)
-      ? `${rec.recommended_reps_min}–${rec.recommended_reps_max} reps`
-      : (rec.recommended_reps_min ? `${rec.recommended_reps_min}+ reps` : '');
-    const targetStr = [weightStr, repsStr].filter(Boolean).join(' × ');
-    return `<div class="next-plan-row">
-      <div class="next-plan-ex">${_esc(rec.exercise_name)}</div>
-      ${targetStr ? `<div class="next-plan-target">${_esc(targetStr)}</div>` : ''}
-      ${rec.reason_text ? `<div class="next-plan-reason">${_esc(rec.reason_text)}</div>` : ''}
-    </div>`;
-  }).join('');
-  el.innerHTML = `<div class="next-plan-title">Next Session Plan</div>${rows}`;
+  const recs = S.nextSessionPlan || [];
+  if (!recs.length) { el.style.display = 'none'; return; }
+  el.style.display = '';
+
+  const typeLabel = {
+    'increase_weight': { badge: '↑ ВАГА',         color: '#4caf50' },
+    'increase_reps':   { badge: '↑ ПОВТОРИ',      color: '#4caf50' },
+    'maintain':        { badge: '═ ТРИМАТИ',      color: '#888' },
+    'decrease':        { badge: '↓ ЗНИЖЕННЯ',     color: '#ff9800' },
+    'stagnation':      { badge: '⚠ СТАГНАЦІЯ',    color: '#ff9800' },
+    'change_strategy': { badge: '🔄 НОВА СТРАТЕГІЯ', color: '#9c27b0' },
+    'deload':          { badge: '💤 DELOAD',       color: '#2196f3' },
+  };
+
+  el.innerHTML = `
+    <div class="next-plan-title">НАСТУПНЕ ТРЕНУВАННЯ</div>
+    ${recs.map(r => {
+      const t = typeLabel[r.recommendation_type] || { badge: r.recommendation_type, color: '#888' };
+      const weightLine = r.recommendation_type === 'deload'
+        ? `<span style="color:#2196f3;font-weight:700">${r.recommended_weight_kg}kg (−40%)</span>`
+        : r.recommended_weight_kg
+          ? `<span>${r.recommended_weight_kg}kg</span>`
+          : '';
+      const repsLine = (r.recommended_reps_min && r.recommended_reps_max)
+        ? `<span style="color:var(--muted)">${r.recommended_reps_min}–${r.recommended_reps_max} повт</span>`
+        : '';
+      return `
+        <div class="rec-card">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+            <span style="font-size:13px;font-weight:600">${_esc(r.exercise_name)}</span>
+            <span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:10px;
+              background:${t.color}22;color:${t.color}">${t.badge}</span>
+          </div>
+          ${weightLine || repsLine ? `<div style="font-size:13px;display:flex;gap:10px;margin-bottom:4px">${weightLine}${repsLine}</div>` : ''}
+          ${r.reason_text ? `<div style="font-size:12px;color:var(--muted);line-height:1.4">${_esc(r.reason_text)}</div>` : ''}
+        </div>`;
+    }).join('')}`;
 }
 
 async function openWeeklyReport() {
@@ -2054,11 +2108,9 @@ function _coachRelDate(isoStr) {
   return diffD + ' дн тому';
 }
 
-async function newCoachThread() {
+function newCoachThread() {
   haptic();
-  const r = await api('POST', '/api/coach/threads');
-  if (!r.success) return;
-  S.activeThread = {id: r.data.thread_id, title: 'Нова розмова', messages: []};
+  S.activeThread = {id: null, title: 'Нова розмова', messages: []};
   _showCoachThread();
 }
 
@@ -2076,7 +2128,7 @@ async function openCoachThread(id) {
 function showCoachList() {
   document.getElementById('coach-thread-view').style.display = 'none';
   document.getElementById('coach-list-view').style.display = 'flex';
-  loadCoachTab();
+  if (S.activeThread?.id) loadCoachTab(); else renderCoachList();
 }
 
 function _showCoachThread() {
@@ -2118,7 +2170,7 @@ function _renderCoachMessages() {
     if (m.role === 'user') {
       return `<div class="coach-msg-user"><span>${_esc(m.content)}</span></div>`;
     }
-    return `<div class="coach-msg-ai">${parseTechniqueMarkdown(m.content)}</div>`;
+    return `<div class="coach-msg-ai">${parseCoachMarkdown(m.content)}</div>`;
   }).join('');
 }
 
@@ -2126,6 +2178,13 @@ async function sendCoachMessage() {
   const input = document.getElementById('coach-input');
   const msg = (input.value || '').trim();
   if (!msg || S.coachStreaming || !S.activeThread) return;
+
+  // Create thread lazily on first message
+  if (!S.activeThread.id) {
+    const cr = await api('POST', '/api/coach/threads');
+    if (!cr.success) return;
+    S.activeThread.id = cr.data.thread_id;
+  }
 
   const isFirst = !(S.activeThread.messages?.length);
 
@@ -2177,7 +2236,7 @@ async function sendCoachMessage() {
         const chunk = line.slice(6);
         if (chunk === '[DONE]') break;
         aiText += chunk;
-        aiBubble.innerHTML = parseTechniqueMarkdown(aiText) + '<span class="coach-cursor">▌</span>';
+        aiBubble.innerHTML = parseCoachMarkdown(aiText) + '<span class="coach-cursor">▌</span>';
         container.scrollTop = container.scrollHeight;
       }
     }
@@ -2186,7 +2245,7 @@ async function sendCoachMessage() {
   }
 
   // Finalize bubble (remove cursor)
-  aiBubble.innerHTML = parseTechniqueMarkdown(aiText);
+  aiBubble.innerHTML = parseCoachMarkdown(aiText);
   container.scrollTop = container.scrollHeight;
 
   S.coachStreaming = false;

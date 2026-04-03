@@ -285,6 +285,12 @@ def session_complete():
         return jsonify({'success': False, 'error': {'code': 'NOT_FOUND', 'message': 'Session not found'}}), 404
 
     session.status = 'completed'
+    # Close any other stale in-progress sessions for this user
+    WorkoutSession.query.filter(
+        WorkoutSession.user_id == g.user_id,
+        WorkoutSession.status == 'in_progress',
+        WorkoutSession.id != session.id,
+    ).update({'status': 'abandoned'})
     db.session.commit()
 
     feedback = generate_post_workout_feedback(session, g.user_id)

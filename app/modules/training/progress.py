@@ -214,6 +214,21 @@ def generate_weekly_report(user_id: int, week_sessions: list) -> str:
     return complete(system, user_msg, max_tokens=1500, model='claude-haiku-4-5-20251001')
 
 
+def _check_is_deload_period(user_id: int) -> bool:
+    """True if deload is needed AND no deload rec was created in the last 7 days."""
+    if not check_deload_needed(user_id):
+        return False
+    from datetime import datetime, timedelta
+    from .models import ExerciseRecommendation
+    cutoff = datetime.utcnow() - timedelta(days=7)
+    recent_deload = ExerciseRecommendation.query.filter(
+        ExerciseRecommendation.user_id == user_id,
+        ExerciseRecommendation.recommendation_type == 'deload',
+        ExerciseRecommendation.created_at >= cutoff,
+    ).first()
+    return recent_deload is None
+
+
 def analyze_session_and_recommend(session_id: int, user_id: int) -> list:
     """Apply evidence-based progressive overload rules after each session.
     Returns list of ExerciseRecommendation objects created."""
@@ -240,6 +255,9 @@ def analyze_session_and_recommend(session_id: int, user_id: int) -> list:
     ).count() > 0
 
     recommendations = []
+
+    # Check deload once per session, not per exercise
+    _is_deload_period = _check_is_deload_period(user_id)
 
     for le in session.logged_exercises:
         current_sets = le.logged_sets
@@ -288,15 +306,6 @@ def analyze_session_and_recommend(session_id: int, user_id: int) -> list:
                     .limit(3)
                     .all())
 
-        # 2-for-2 rule: current AND previous session each had avg_reps >= target_max + 2
-        two_for_two = False
-        if target_max and prev_les:
-            current_exceeded = avg_reps >= target_max + 2
-            prev_sets = prev_les[0].logged_sets
-            if prev_sets and current_exceeded:
-                prev_avg = sum(s.actual_reps or 0 for s in prev_sets) / len(prev_sets)
-                two_for_two = prev_avg >= target_max + 2
-
         # Stagnation: same weight AND same total reps for 3 consecutive sessions
         stagnation = False
         if len(prev_les) >= 2:
@@ -319,47 +328,102 @@ def analyze_session_and_recommend(session_id: int, user_id: int) -> list:
         # Stretch-mediated flag
         stretch_flag = getattr(le.exercise, 'muscle_position', None) == 'stretched'
 
-        # Decision tree (Chaves 2024 / Plotkin 2022 / Schoenfeld 2023)
+        # Decision tree
         rec_type = 'maintain'
         rec_weight = last_weight
         rec_min = target_min or 8
         rec_max = target_max or 10
         reason = ''
 
-        if stagnation:
-            rec_type = 'stagnation'
-            reason = ('No progress for 3+ sessions. Change strategy: adjust tempo, '
-                      'range of motion, or rep scheme — do NOT just add weight.')
+        # Branch 1: Deload period
+        if _is_deload_period:
+            rec_type = 'deload'
+            rec_weight = round(last_weight * 0.6 / 2.5) * 2.5
+            reason = (
+                f'Deload тиждень. Знижуємо вагу до {rec_weight:.1f}kg (60% від робочої '
+                f'{last_weight:.1f}kg). Об\'єм −50%: виконуй половину підходів. '
+                'Мета — відновлення, а не прогрес.'
+            )
+
+        # Branch 2: RPE≥9 + pain
         elif avg_rpe >= 9 and pain_today:
             rec_type = 'decrease'
             rec_weight = round(last_weight * 0.9 / 2.5) * 2.5
-            reason = (f'RPE {avg_rpe:.0f} + pain logged today. '
-                      f'Decrease weight 10% → {rec_weight:.1f}kg.')
-        elif avg_rpe >= 9:
-            rec_type = 'maintain'
-            reason = (f'RPE {avg_rpe:.0f} — too close to failure for volume work. '
-                      'Maintain same weight next session.')
-        elif two_for_two and avg_rpe <= 8:
+            reason = (
+                f'RPE {avg_rpe:.0f} + біль сьогодні. '
+                f'Знизь вагу на 10% → {rec_weight:.1f}kg. '
+                'Якщо біль не проходить — замін вправу на варіацію.'
+            )
+
+        # Branch 3: Stagnation
+        elif stagnation:
+            # Count prior stagnation/change_strategy recs for this exercise
+            prior_stagnations = ExerciseRecommendation.query.filter(
+                ExerciseRecommendation.user_id == user_id,
+                ExerciseRecommendation.exercise_id == exercise_id,
+                ExerciseRecommendation.recommendation_type.in_(('stagnation', 'change_strategy')),
+            ).count()
+
+            if prior_stagnations >= 3:
+                rec_type = 'change_strategy'
+                lang = (getattr(user, 'app_language', 'en') or 'en')
+                lang_note = 'Відповідь ТІЛЬКИ українською.' if lang == 'uk' else 'Reply in English only.'
+                try:
+                    reason = complete(
+                        f'You are a strength coach. {lang_note} '
+                        'The athlete has been stagnating on this exercise for 3+ sessions with the same weight and reps. '
+                        'Suggest ONE specific technique variation to break the plateau. '
+                        'Be concrete: name the variation, the tempo or rep scheme. Max 20 words.',
+                        f'Exercise: {le.exercise.name}. Current: {last_weight}kg × {int(avg_reps)} reps × {len(current_sets)} sets. RPE {avg_rpe:.0f}.',
+                        max_tokens=60,
+                        model='claude-haiku-4-5-20251001',
+                    ).strip()
+                except Exception:
+                    rec_type = 'stagnation'
+                    reason = (
+                        'Прогрес зупинився 3+ сесії поспіль. '
+                        'Зміни одну змінну: сповільни темп (3-1-3), '
+                        'збільши амплітуду, або додай підхід замість ваги.'
+                    )
+            else:
+                rec_type = 'stagnation'
+                reason = (
+                    'Прогрес зупинився 3+ сесії поспіль. '
+                    'Зміни одну змінну: сповільни темп (3-1-3), '
+                    'збільши амплітуду, або додай підхід замість ваги.'
+                )
+
+        # Branch 4: All sets at max reps + low RPE → increase weight
+        elif target_max and avg_reps >= target_max and avg_rpe <= 8:
             rec_type = 'increase_weight'
             rec_weight = last_weight + increment
-            prog_note = 'Load progression (strength goal).' if is_strength_goal else 'Load progression.'
-            reason = (f'2-for-2 rule triggered. {prog_note} '
-                      f'RPE {avg_rpe:.0f} → +{increment}kg next session.')
-        elif avg_rpe <= 8:
+            reason = (
+                f'Всі підходи на максимумі повторів ({target_max}) при RPE {avg_rpe:.0f}. '
+                f'+{increment}kg → {rec_weight:.1f}kg наступного разу.'
+            )
+            if level in ('intermediate', 'advanced'):
+                reason += ' (Хвильове: застосовуй тільки на важкому тижні.)'
+
+        # Branch 5: In range + moderate RPE → increase reps
+        elif target_min and target_max and target_min <= avg_reps < target_max and avg_rpe <= 8:
             rec_type = 'increase_reps'
             rec_max = (target_max or 10) + 1
-            reason = (f'RPE {avg_rpe:.0f} — productive zone. '
-                      'Add 1 rep before increasing weight (only change ONE variable).')
+            reason = (
+                f'В діапазоні ({avg_reps:.0f} повт) при RPE {avg_rpe:.0f}. '
+                f'Додай 1 повтор → ціль {rec_min}–{rec_max}. '
+                'Змінюй лише одну змінну за раз.'
+            )
+
+        # Branch 6: High RPE or below target → maintain
         else:
             rec_type = 'maintain'
-            reason = f'RPE {avg_rpe:.0f} — on track. Repeat same weight and reps.'
-
-        # Periodization note by level
-        if level in ('intermediate', 'advanced') and rec_type == 'increase_weight':
-            reason += ' (Wave loading: apply on heavy week only.)'
+            reason = (
+                f'RPE {avg_rpe:.0f} — повтори ту ж вагу та кількість повторів. '
+                'Стабільність зараз важливіша за прогрес.'
+            )
 
         if stretch_flag:
-            reason += ' Stretch-mediated stimulus — prioritise full ROM for max hypertrophy.'
+            reason += ' Stretch-mediated: пріоритет повній амплітуді.'
 
         rec = ExerciseRecommendation(
             user_id=user_id,
