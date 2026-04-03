@@ -1948,7 +1948,10 @@ function parseCoachMarkdown(text) {
   for (const raw of lines) {
     const line = raw.trim();
     if (!line) { html += '<div style="height:6px"></div>'; continue; }
-    const inline = t => _esc(t).replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+    const inline = t => _esc(t)
+      .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+      .replace(/\*\*/g, '')
+      .replace(/#{1,3}\s?/g, '');
     if (/^#{1,3}\s/.test(line)) {
       html += `<div class="coach-md-header">${inline(line.replace(/^#{1,3}\s*/, ''))}</div>`;
     } else if (/^[-•*]\s/.test(line)) {
@@ -1975,6 +1978,8 @@ async function completeWorkout() {
   haptic('heavy');
   stopTimer();
   const r = await api('POST', '/api/training/session/complete', {session_id: S.sessionId});
+  S.sessionId = null;
+  S.pendingResume = null;
   showScreen('main');
   if (r.success) {
     if (r.data?.next_session_plan?.length) {
