@@ -492,6 +492,12 @@
     .next-plan-reason { font-size: 11px; color: #888; font-style: italic; }
     .rec-card { background: var(--card); border: 1px solid var(--border);
       border-radius: 8px; padding: 10px 12px; margin-bottom: 8px; }
+    .cycle-phase-badge { display:inline-block; font-size:12px; font-weight:600;
+      padding:3px 10px; border-radius:12px; background:var(--card);
+      border:1px solid var(--border); color:var(--muted); margin-bottom:12px; }
+    .cycle-ai-note { background:#ff980018; border:1px solid #ff980044;
+      border-radius:6px; padding:8px 10px; font-size:12px; color:#ff9800;
+      margin-top:4px; line-height:1.4; }
   </style>
 </head>
 <body>
@@ -559,6 +565,7 @@
   </div>
   <div class="content">
     <div class="tab-panel active" id="panel-train">
+      <div id="cycle-phase-badge" class="cycle-phase-badge" style="display:none"></div>
       <div id="train-content"><!-- dynamic --></div>
       <div class="quick-cards">
         <div class="quick-card" onclick="openCheckin()">
@@ -640,6 +647,12 @@
         <input type="number" id="checkin-weight" step="0.1" placeholder="e.g. 65.5"></div>
       <div class="field"><label>Notes (optional)</label>
         <textarea id="checkin-notes" placeholder="How are you feeling today?"></textarea></div>
+      <div id="cycle-day-row" style="display:none" class="field">
+        <label style="font-size:12px;color:var(--muted)">День циклу (якщо відрізняється)</label>
+        <input type="number" id="checkin-cycle-day" min="1" max="35"
+          style="width:80px;padding:6px;border:1px solid var(--border);border-radius:6px;
+          background:var(--card);color:var(--text);font-size:14px">
+      </div>
       <div id="checkin-msg"></div>
       <button class="btn btn-primary" onclick="submitCheckin()">SAVE CHECK-IN</button>
     </div>
@@ -753,6 +766,18 @@
   </div>
 </div>
 
+<!-- OVERLAY: CYCLE -->
+<div id="overlay-cycle" class="overlay" onclick="overlayBgClick(event,'overlay-cycle')">
+  <div class="overlay-sheet">
+    <div class="overlay-handle"></div>
+    <div id="cycle-card-content"></div>
+    <div style="display:flex;gap:10px;margin-top:16px">
+      <button class="btn btn-primary" style="flex:1" onclick="applyAndStartWorkout()">АДАПТУВАТИ</button>
+      <button class="btn btn-ghost" style="flex:1" onclick="ignoreAndStartWorkout()">ІГНОРУВАТИ</button>
+    </div>
+  </div>
+</div>
+
 <!-- OVERLAY: PROFILE -->
 <div id="overlay-profile" class="overlay" onclick="overlayBgClick(event,'overlay-profile')">
   <div class="overlay-sheet">
@@ -794,6 +819,9 @@ const S = {
   coachThreads: [],
   activeThread: null,
   coachStreaming: false,
+  cyclePhase: null,      // phase data from GET /api/training/cycle/phase
+  cycleAdaptation: null, // { modifier, adaptations } when user chose "Adapt"
+  user: null,            // cached /api/users/me data
 };
 
 const RPE_LABELS = {5: 'Легко', 7: 'Нормально', 8: 'Важко', 9: 'На межі'};
@@ -979,8 +1007,9 @@ async function loadMain() {
     (recR.data.recommendations || []).forEach(rec => { targets[rec.exercise_id] = rec; });
     S.todayTargets = targets;
   }
-  if (userR.success && userR.data.app_language) {
-    _lang = userR.data.app_language;
+  if (userR.success) {
+    S.user = userR.data;
+    if (userR.data.app_language) _lang = userR.data.app_language;
   }
   S.pendingResume = (activeR.success && activeR.data) ? activeR.data : null;
   // If active session has workout data, use it as todayWorkout for resume
@@ -990,6 +1019,12 @@ async function loadMain() {
   applyTranslations();
   renderTrainTab();
   showScreen('main');
+  // Load cycle phase badge after main screen is shown
+  const cr = await api('GET', '/api/training/cycle/phase');
+  if (cr.success) {
+    S.cyclePhase = cr.data;
+    renderCycleBadge();
+  }
 }
 
 function renderTrainTab() {
@@ -1069,6 +1104,44 @@ function renderTrainTab() {
     </div>` + targetsHtml;
 }
 
+function renderCycleBadge() {
+  const el = document.getElementById('cycle-phase-badge');
+  if (!el) return;
+  if (!S.cyclePhase || !S.cyclePhase.phase) { el.style.display = 'none'; return; }
+  const icons = { menstrual: '🩸', follicular: '💪', ovulation: '⚠️', luteal: '🌙' };
+  const icon = icons[S.cyclePhase.phase] || '';
+  el.style.display = '';
+  el.textContent = `${icon} ${S.cyclePhase.phase_title} • день ${S.cyclePhase.cycle_day}`;
+}
+
+function renderCycleCard() {
+  const el = document.getElementById('cycle-card-content');
+  if (!el || !S.cyclePhase) return;
+  const p = S.cyclePhase;
+  const icons = { menstrual: '🩸', follicular: '💪', ovulation: '⚠️', luteal: '🌙' };
+  const icon = icons[p.phase] || '';
+  const warningsHtml = p.warnings?.length
+    ? `<div style="color:#ff9800;font-size:12px;margin-top:8px">${p.warnings.map(w => `⚠️ ${_esc(w)}`).join('<br>')}</div>`
+    : '';
+  const adaptationsHtml = p.adaptations?.length
+    ? `<div style="margin-top:12px">
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--muted);margin-bottom:6px">Адаптації</div>
+        ${p.adaptations.map(a => `
+          <div style="margin-bottom:6px">
+            <span style="font-size:13px">${_esc(a.exercise_name)}</span>
+            <span style="color:var(--muted);font-size:12px"> ${_esc(String(a.original_weight))}kg → </span>
+            <span style="color:#4caf50;font-weight:700;font-size:13px">${_esc(String(a.adapted_weight))}kg</span>
+            ${a.ai_note ? `<div class="cycle-ai-note">💡 ${_esc(a.ai_note)}</div>` : ''}
+          </div>`).join('')}
+       </div>`
+    : '';
+  el.innerHTML = `
+    <div style="font-size:16px;font-weight:700;margin-bottom:4px">${icon} ${_esc(p.phase_title)} • день ${_esc(String(p.cycle_day))}</div>
+    <div style="font-size:13px;color:var(--muted);line-height:1.5">${_esc(p.phase_description)}</div>
+    ${warningsHtml}
+    ${adaptationsHtml}`;
+}
+
 function renderTargetsSection() {
   const targets = S.todayTargets;
   const w = S.todayWorkout;
@@ -1077,16 +1150,24 @@ function renderTargetsSection() {
   const rows = w.exercises.map(ex => {
     const rec = targets[ex.exercise_id];
     if (!rec) return '';
-    const weightStr = rec.recommended_weight_kg ? `${rec.recommended_weight_kg}kg` : '';
+    const modifier = S.cycleAdaptation?.modifier || 1.0;
+    const rawWeight = rec.recommended_weight_kg;
+    const displayWeight = rawWeight ? Math.round((rawWeight * modifier) / 2.5) * 2.5 : null;
+    const weightStr = displayWeight ? `${displayWeight}kg` : '';
     const repsStr = (rec.recommended_reps_min && rec.recommended_reps_max)
       ? `${rec.recommended_reps_min}–${rec.recommended_reps_max} reps`
       : (rec.recommended_reps_min ? `${rec.recommended_reps_min}+ reps` : '');
     const targetStr = [weightStr, repsStr].filter(Boolean).join(' × ');
     if (!targetStr) return '';
+    const adaptation = S.cycleAdaptation?.adaptations?.find(a => a.exercise_id === rec.exercise_id);
+    const aiNoteHtml = adaptation?.ai_note
+      ? `<div class="cycle-ai-note">💡 ${_esc(adaptation.ai_note)}</div>`
+      : '';
     return `<div class="target-row">
       <div class="target-ex-name">${_esc(ex.exercise_name)}</div>
       <div class="target-values">${_esc(targetStr)}</div>
       ${rec.reason_text ? `<div class="target-reason">${_esc(rec.reason_text)}</div>` : ''}
+      ${aiNoteHtml}
     </div>`;
   }).filter(Boolean).join('');
 
@@ -1577,20 +1658,59 @@ async function generateInsights() {
 }
 
 // ── TAB SWITCH ──
-function switchTab(name) {
+async function switchTab(name) {
   document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
   document.querySelector(`[data-tab="${name}"]`).classList.add('active');
   document.getElementById(`panel-${name}`).classList.add('active');
   haptic();
+  if (name === 'train') {
+    const cr = await api('GET', '/api/training/cycle/phase');
+    if (cr.success) {
+      S.cyclePhase = cr.data;
+      renderCycleBadge();
+    }
+  }
   if (name === 'program') loadProgramTab();
   if (name === 'coach') loadCoachTab();
 }
 
 // ── SESSION ──
 async function startWorkout() {
+  // Check cycle phase — show card if applicable
+  const cr = await api('GET', '/api/training/cycle/phase');
+  if (cr.success) {
+    S.cyclePhase = cr.data;
+    renderCycleBadge();
+    if (cr.data.show_card) {
+      renderCycleCard();
+      openOverlay('overlay-cycle');
+      return;  // wait for user to tap Adapt or Ignore
+    }
+  }
+  await _doStartWorkout(null);
+}
+
+async function applyAndStartWorkout() {
+  closeOverlay('overlay-cycle');
+  if (!S.cyclePhase) { await _doStartWorkout(null); return; }
+  S.cycleAdaptation = {
+    modifier: S.cyclePhase.modifier,
+    adaptations: S.cyclePhase.adaptations || [],
+  };
+  await _doStartWorkout({ cycle_phase: S.cyclePhase.phase, cycle_adapted: true });
+}
+
+async function ignoreAndStartWorkout() {
+  closeOverlay('overlay-cycle');
+  S.cycleAdaptation = null;
+  await _doStartWorkout({ cycle_phase: S.cyclePhase?.phase, cycle_adapted: false });
+}
+
+async function _doStartWorkout(cycleData) {
   haptic('medium');
   const body = S.todayWorkout?.id ? {workout_id: S.todayWorkout.id} : {};
+  if (cycleData) Object.assign(body, cycleData);
   const r = await api('POST', '/api/training/session/start', body);
   if (!r.success) { alert('Could not start session'); return; }
   S.sessionId = r.data.session_id;
@@ -2299,6 +2419,9 @@ function openCheckin() {
   document.getElementById('checkin-weight').value = '';
   document.getElementById('checkin-notes').value = '';
   document.getElementById('checkin-msg').textContent = '';
+  document.getElementById('checkin-cycle-day').value = '';
+  document.getElementById('cycle-day-row').style.display =
+    S.user?.menstrual_tracking ? '' : 'none';
   haptic(); openOverlay('overlay-checkin');
 }
 async function submitCheckin() {
@@ -2311,6 +2434,8 @@ async function submitCheckin() {
     body_weight_kg: parseFloat(document.getElementById('checkin-weight').value)||null,
     notes: document.getElementById('checkin-notes').value||null,
   };
+  const cycleDay = document.getElementById('checkin-cycle-day')?.value;
+  if (cycleDay) body.cycle_day = parseInt(cycleDay);
   const r = await api('POST', '/api/checkin', body);
   const el = document.getElementById('checkin-msg');
   if (r.success) {

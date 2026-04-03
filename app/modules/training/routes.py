@@ -197,11 +197,15 @@ def _serialize_workout_with_sets(workout: Workout) -> dict:
 @require_auth
 def session_start():
     data = request.json or {}
+    _phase = data.get('cycle_phase')
+    _VALID_PHASES = {'menstrual', 'follicular', 'ovulation', 'luteal'}
     session = WorkoutSession(
         user_id=g.user_id,
         workout_id=data.get('workout_id'),
         date=date.today(),
         status='in_progress',
+        cycle_phase=_phase if _phase in _VALID_PHASES else None,
+        cycle_adapted=bool(data.get('cycle_adapted', False)),
     )
     db.session.add(session)
     db.session.commit()
@@ -650,3 +654,22 @@ def recommendations_today():
         'recommendations': recs,
         'deload_needed': deload_needed,
     }})
+
+
+@bp.route('/training/cycle/phase', methods=['GET'])
+@require_auth
+def cycle_phase_check():
+    from app.modules.training.cycle import get_cycle_phase, get_cycle_adaptations
+    phase_data = get_cycle_phase(g.user_id)
+    if not phase_data.get('phase'):
+        # tracking disabled or no data
+        return jsonify({'success': True, 'data': phase_data})
+    adaptations = []
+    if phase_data.get('show_card') and phase_data['phase'] in ('ovulation', 'luteal', 'menstrual'):
+        adaptations = get_cycle_adaptations(
+            g.user_id,
+            phase_data['phase'],
+            phase_data['modifier'],
+        )
+    phase_data['adaptations'] = adaptations
+    return jsonify({'success': True, 'data': phase_data})

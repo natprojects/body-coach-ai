@@ -1,0 +1,188 @@
+# app/modules/training/cycle.py
+from datetime import date
+from app.core.models import DailyCheckin, User
+from app.core.ai import complete
+from app.extensions import db
+
+PHASE_DATA = {
+    'menstrual': {
+        'title': 'Менструальна фаза',
+        'description': 'Тренуйся за самопочуттям. Якщо енергія низька — не форсуй.',
+        'modifier': 1.0,
+        'pr_allowed': True,
+        'warnings': [],
+    },
+    'follicular': {
+        'title': 'Фолікулярна фаза',
+        'description': 'Найкращий час для важких тренувань і нових рекордів.',
+        'modifier': 1.0,
+        'pr_allowed': True,
+        'warnings': [],
+    },
+    'ovulation': {
+        'title': 'Овуляція',
+        'description': "Підвищена лаксичність зв'язок. Зроби додаткову розминку суглобів, уникай стрибків.",
+        'modifier': 1.0,
+        'pr_allowed': True,
+        'warnings': ["Уникай плайометрики (стрибки, бурпі) — підвищений ризик травми зв'язок."],
+    },
+    'luteal': {
+        'title': 'Лютеальна фаза',
+        'description': 'Знижена працездатність — це нормально. −10% ваги, без рекордів. Фокус на техніку.',
+        'modifier': 0.9,
+        'pr_allowed': False,
+        'warnings': [],
+    },
+}
+
+_PLYOMETRIC_KW = ('jump', 'box jump', 'burpee', 'hop', 'bound', 'стрибок', 'бурпі', 'lunge jump')
+_COMPOUND_KW = ('squat', 'deadlift', 'bench press', 'overhead press', 'military press',
+                'rdl', 'romanian', 'row', 'присід', 'мертва', 'жим')
+
+
+def _is_plyometric(name: str) -> bool:
+    n = name.lower()
+    return any(kw in n for kw in _PLYOMETRIC_KW)
+
+
+def _is_compound(name: str) -> bool:
+    n = name.lower()
+    return any(kw in n for kw in _COMPOUND_KW)
+
+
+def _phase_for_day(cycle_day: int) -> str:
+    if cycle_day <= 5:
+        return 'menstrual'
+    if cycle_day <= 11:
+        return 'follicular'
+    if cycle_day <= 16:
+        return 'ovulation'
+    return 'luteal'
+
+
+def get_cycle_phase(user_id: int) -> dict:
+    """Return cycle phase info for the user.
+
+    Returns {'show_card': False} if cycle tracking is not enabled or data is missing.
+    """
+    user = db.session.get(User, user_id)
+    if not user or not user.menstrual_tracking or not user.last_period_date:
+        return {'show_card': False}
+
+    today_checkin = DailyCheckin.query.filter_by(
+        user_id=user_id, date=date.today()
+    ).first()
+
+    if today_checkin and today_checkin.cycle_day:
+        cycle_day = today_checkin.cycle_day
+    else:
+        cycle_length = user.cycle_length_days or 28
+        days_since = (date.today() - user.last_period_date).days
+        cycle_day = (days_since % cycle_length) + 1
+
+    phase = _phase_for_day(cycle_day)
+    info = dict(PHASE_DATA[phase])
+    info['warnings'] = list(info['warnings'])
+
+    # Determine whether to show the pre-workout card
+    if phase == 'follicular':
+        show_card = False
+    elif phase == 'menstrual':
+        energy = getattr(today_checkin, 'energy_level', None) if today_checkin else None
+        show_card = bool(energy and energy < 5)
+    else:
+        show_card = True  # ovulation and luteal always show card
+
+    return {
+        'show_card': show_card,
+        'phase': phase,
+        'cycle_day': cycle_day,
+        'modifier': info['modifier'],
+        'phase_title': info['title'],
+        'phase_description': info['description'],
+        'warnings': info['warnings'],
+        'pr_allowed': info['pr_allowed'],
+    }
+
+
+def get_cycle_adaptations(user_id: int, phase: str, modifier: float) -> list:
+    """Return weight adaptations for today's recommendations, with AI notes for key exercises."""
+    from app.modules.training.models import ExerciseRecommendation
+    from sqlalchemy import func
+
+    # Latest recommendation per exercise for this user
+    latest_subq = (
+        db.session.query(
+            ExerciseRecommendation.exercise_id,
+            func.max(ExerciseRecommendation.created_at).label('max_created'),
+        )
+        .filter_by(user_id=user_id)
+        .group_by(ExerciseRecommendation.exercise_id)
+        .subquery()
+    )
+    recs = (
+        ExerciseRecommendation.query
+        .join(latest_subq, db.and_(
+            ExerciseRecommendation.exercise_id == latest_subq.c.exercise_id,
+            ExerciseRecommendation.created_at == latest_subq.c.max_created,
+        ))
+        .filter(ExerciseRecommendation.user_id == user_id)
+        .limit(10)
+        .all()
+    )
+
+    adaptations = []
+    ai_calls = 0
+
+    for rec in recs:
+        original = rec.recommended_weight_kg or 0
+        if original <= 0:
+            continue
+
+        adapted = round(original * modifier / 2.5) * 2.5
+        ai_note = None
+
+        needs_ai = (
+            (phase == 'ovulation' and _is_plyometric(rec.exercise.name)) or
+            (phase == 'luteal' and _is_compound(rec.exercise.name))
+        )
+        if needs_ai and ai_calls < 3:
+            try:
+                ai_note = _ai_suggestion(rec.exercise.name, original, phase)
+                ai_calls += 1
+            except Exception:
+                pass
+
+        if adapted != original or ai_note:
+            adaptations.append({
+                'exercise_name': rec.exercise.name,
+                'exercise_id': rec.exercise_id,
+                'original_weight': original,
+                'adapted_weight': adapted,
+                'ai_note': ai_note,
+            })
+
+    return adaptations
+
+
+def _ai_suggestion(exercise_name: str, weight_kg: float, phase: str) -> str:
+    if phase == 'ovulation':
+        system = (
+            'You are a strength coach. Reply in Ukrainian only. '
+            'Suggest ONE lower-impact alternative to this plyometric exercise to protect joints '
+            'during ovulation (high estrogen = ligament laxity). '
+            'Be specific: name the alternative, give weight and reps. Max 15 words.'
+        )
+    else:  # luteal
+        system = (
+            'You are a strength coach. Reply in Ukrainian only. '
+            'Suggest ONE easier variation of this compound exercise for the luteal phase '
+            '(lower energy week, −10% performance normal). '
+            'Be specific: name the variation, give weight and reps. Max 15 words.'
+        )
+    return complete(
+        system,
+        f'Exercise: {exercise_name}, {weight_kg}kg.',
+        max_tokens=50,
+        model='claude-haiku-4-5-20251001',
+    ).strip()
