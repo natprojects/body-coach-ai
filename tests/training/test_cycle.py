@@ -2,6 +2,7 @@
 from datetime import date, datetime, timedelta
 import pytest
 from app.core.models import DailyCheckin, User
+from app.core.auth import create_jwt
 
 
 def _make_user_with_cycle(db, last_period_date=None, cycle_length_days=28,
@@ -18,6 +19,10 @@ def _make_user_with_cycle(db, last_period_date=None, cycle_length_days=28,
     db.session.add(u)
     db.session.commit()
     return u
+
+
+def _h(app, user_id):
+    return {'Authorization': f'Bearer {create_jwt(user_id, app.config["SECRET_KEY"])}'}
 
 
 def test_luteal_phase_detected(app, db):
@@ -124,13 +129,6 @@ def test_is_compound_detection():
     assert _is_compound('Bench Press') is True
     assert _is_compound('Bicep Curl') is False
     assert _is_compound('Leg Extension') is False
-
-
-from app.core.auth import create_jwt
-
-
-def _h(app, user_id):
-    return {'Authorization': f'Bearer {create_jwt(user_id, app.config["SECRET_KEY"])}'}
 
 
 def test_cycle_phase_endpoint_returns_data(client, app, db):
