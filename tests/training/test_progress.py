@@ -236,3 +236,65 @@ def test_stagnation_after_3_identical_sessions(app, db):
 
     assert len(recs) == 1
     assert recs[0].recommendation_type == 'stagnation'
+
+
+def test_ai_strategy_change_after_3_stagnations(app, db, mock_anthropic):
+    """After 3+ prior stagnation recs for same exercise, type becomes 'change_strategy'."""
+    user = _make_user(db)
+    ex = _make_exercise(db, 'Stagnation Exercise')
+
+    # Create 3 prior stagnation recs for this exercise
+    for _ in range(3):
+        db.session.add(ExerciseRecommendation(
+            user_id=user.id, exercise_id=ex.id,
+            recommendation_type='stagnation',
+            recommended_weight_kg=80.0, recommended_reps_min=8, recommended_reps_max=10,
+            reason_text='stagnating',
+        ))
+    db.session.commit()
+
+    # Mock AI response
+    mock_anthropic.messages.create.return_value = MagicMock(
+        content=[MagicMock(text='Спробуй паузний жим: 2 сек пауза внизу, 3 сети по 6.')]
+    )
+
+    # Current session: same weight/reps as always → stagnation triggered
+    session = _make_session(db, user.id, status='in_progress')
+    _log_sets(db, session, ex, [(8, 80.0, 8), (8, 80.0, 8), (8, 80.0, 8)])
+
+    # 2 prev sessions with same weight+reps for stagnation detection
+    for i in range(1, 3):
+        prev = _make_session(db, user.id, status='completed', days_ago=i * 7)
+        _log_sets(db, prev, ex, [(8, 80.0, 8), (8, 80.0, 8), (8, 80.0, 8)])
+
+    session.status = 'completed'
+    db.session.commit()
+
+    from app.modules.training.progress import analyze_session_and_recommend
+    recs = analyze_session_and_recommend(session.id, user.id)
+
+    strat_recs = [r for r in recs if r.exercise_id == ex.id]
+    assert len(strat_recs) == 1
+    assert strat_recs[0].recommendation_type == 'change_strategy'
+    assert 'паузний' in strat_recs[0].reason_text
+
+
+def test_no_ai_call_for_first_stagnation(app, db, mock_anthropic):
+    """First stagnation (< 3 prior recs) → type='stagnation', no AI call."""
+    user = _make_user(db)
+    ex = _make_exercise(db, 'First Stagnation')
+
+    session = _make_session(db, user.id, status='in_progress')
+    _log_sets(db, session, ex, [(8, 80.0, 8), (8, 80.0, 8), (8, 80.0, 8)])
+    for i in range(1, 3):
+        prev = _make_session(db, user.id, status='completed', days_ago=i * 7)
+        _log_sets(db, prev, ex, [(8, 80.0, 8), (8, 80.0, 8), (8, 80.0, 8)])
+    session.status = 'completed'
+    db.session.commit()
+
+    from app.modules.training.progress import analyze_session_and_recommend
+    recs = analyze_session_and_recommend(session.id, user.id)
+
+    stag_recs = [r for r in recs if r.exercise_id == ex.id]
+    assert stag_recs[0].recommendation_type == 'stagnation'
+    mock_anthropic.messages.create.assert_not_called()
