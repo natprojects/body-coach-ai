@@ -1,6 +1,7 @@
 # app/modules/training/cycle.py
 from datetime import date
 from app.core.models import DailyCheckin, User
+from app.core.ai import complete
 from app.extensions import db
 
 PHASE_DATA = {
@@ -105,7 +106,7 @@ def get_cycle_phase(user_id: int) -> dict:
 
 
 def get_cycle_adaptations(user_id: int, phase: str, modifier: float) -> list:
-    """Return weight adaptations for today's recommendations. Stub — AI added in Task 4."""
+    """Return weight adaptations for today's recommendations, with AI notes for key exercises."""
     from app.modules.training.models import ExerciseRecommendation
     from sqlalchemy import func
 
@@ -131,17 +132,57 @@ def get_cycle_adaptations(user_id: int, phase: str, modifier: float) -> list:
     )
 
     adaptations = []
+    ai_calls = 0
+
     for rec in recs:
         original = rec.recommended_weight_kg or 0
         if original <= 0:
             continue
+
         adapted = round(original * modifier / 2.5) * 2.5
-        if adapted != original:
+        ai_note = None
+
+        needs_ai = (
+            (phase == 'ovulation' and _is_plyometric(rec.exercise.name)) or
+            (phase == 'luteal' and _is_compound(rec.exercise.name))
+        )
+        if needs_ai and ai_calls < 3:
+            try:
+                ai_note = _ai_suggestion(rec.exercise.name, original, phase)
+                ai_calls += 1
+            except Exception:
+                pass
+
+        if adapted != original or ai_note:
             adaptations.append({
                 'exercise_name': rec.exercise.name,
                 'exercise_id': rec.exercise_id,
                 'original_weight': original,
                 'adapted_weight': adapted,
-                'ai_note': None,
+                'ai_note': ai_note,
             })
+
     return adaptations
+
+
+def _ai_suggestion(exercise_name: str, weight_kg: float, phase: str) -> str:
+    if phase == 'ovulation':
+        system = (
+            'You are a strength coach. Reply in Ukrainian only. '
+            'Suggest ONE lower-impact alternative to this plyometric exercise to protect joints '
+            'during ovulation (high estrogen = ligament laxity). '
+            'Be specific: name the alternative, give weight and reps. Max 15 words.'
+        )
+    else:  # luteal
+        system = (
+            'You are a strength coach. Reply in Ukrainian only. '
+            'Suggest ONE easier variation of this compound exercise for the luteal phase '
+            '(lower energy week, −10% performance normal). '
+            'Be specific: name the variation, give weight and reps. Max 15 words.'
+        )
+    return complete(
+        system,
+        f'Exercise: {exercise_name}, {weight_kg}kg.',
+        max_tokens=50,
+        model='claude-haiku-4-5-20251001',
+    ).strip()

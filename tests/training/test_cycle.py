@@ -166,3 +166,81 @@ def test_session_start_saves_cycle_fields(client, app, db):
     session = WorkoutSession.query.get(data['data']['session_id'])
     assert session.cycle_phase == 'luteal'
     assert session.cycle_adapted is True
+
+
+from unittest.mock import MagicMock, patch
+from app.modules.training.models import Exercise, ExerciseRecommendation
+from datetime import datetime as dt
+
+
+def _make_rec(db, user_id, exercise_name, weight, muscle_group='Chest'):
+    ex = Exercise(name=exercise_name, muscle_group=muscle_group)
+    db.session.add(ex)
+    db.session.flush()
+    rec = ExerciseRecommendation(
+        user_id=user_id, exercise_id=ex.id,
+        recommendation_type='maintain',
+        recommended_weight_kg=weight,
+        recommended_reps_min=8, recommended_reps_max=10,
+        reason_text='test',
+    )
+    db.session.add(rec)
+    db.session.commit()
+    return rec
+
+
+def test_luteal_applies_weight_modifier(app, db):
+    """Luteal phase: weights reduced by 10%."""
+    user = _make_user_with_cycle(db, last_period_date=date.today() - timedelta(days=18))
+    _make_rec(db, user.id, 'Bench Press', 60.0)
+    from app.modules.training.cycle import get_cycle_adaptations
+    adaptations = get_cycle_adaptations(user.id, 'luteal', 0.9)
+    assert len(adaptations) == 1
+    assert adaptations[0]['original_weight'] == 60.0
+    assert adaptations[0]['adapted_weight'] == 55.0  # 60 * 0.9 = 54 → rounds to 55 (nearest 2.5)
+
+
+def test_follicular_no_adaptations(app, db):
+    """Follicular phase modifier=1.0: no weight changes, no adaptations returned."""
+    user = _make_user_with_cycle(db, last_period_date=date.today() - timedelta(days=7))
+    _make_rec(db, user.id, 'Squat', 80.0)
+    from app.modules.training.cycle import get_cycle_adaptations
+    adaptations = get_cycle_adaptations(user.id, 'follicular', 1.0)
+    assert adaptations == []
+
+
+def test_ai_note_for_compound_in_luteal(app, db, mock_anthropic):
+    """Luteal + compound exercise → AI suggestion generated."""
+    user = _make_user_with_cycle(db, last_period_date=date.today() - timedelta(days=18))
+    _make_rec(db, user.id, 'Squat', 80.0, muscle_group='Legs')
+    mock_anthropic.messages.create.return_value = MagicMock(
+        content=[MagicMock(text='Спробуй goblet squat 32kg × 10.')]
+    )
+    from app.modules.training.cycle import get_cycle_adaptations
+    adaptations = get_cycle_adaptations(user.id, 'luteal', 0.9)
+    compound = [a for a in adaptations if 'Squat' in a['exercise_name']]
+    assert len(compound) == 1
+    assert compound[0]['ai_note'] == 'Спробуй goblet squat 32kg × 10.'
+    mock_anthropic.messages.create.assert_called_once()
+
+
+def test_ai_not_called_for_non_compound_in_luteal(app, db, mock_anthropic):
+    """Luteal + isolation exercise (bicep curl) → no AI call."""
+    user = _make_user_with_cycle(db, last_period_date=date.today() - timedelta(days=18))
+    _make_rec(db, user.id, 'Bicep Curl', 15.0, muscle_group='Arms')
+    from app.modules.training.cycle import get_cycle_adaptations
+    adaptations = get_cycle_adaptations(user.id, 'luteal', 0.9)
+    mock_anthropic.messages.create.assert_not_called()
+
+
+def test_ai_failure_falls_back_gracefully(app, db, mock_anthropic):
+    """If AI call throws, adaptation still returned with ai_note=None."""
+    user = _make_user_with_cycle(db, last_period_date=date.today() - timedelta(days=18))
+    _make_rec(db, user.id, 'Deadlift', 100.0, muscle_group='Back')
+    mock_anthropic.messages.create.side_effect = Exception('API error')
+    from app.modules.training.cycle import get_cycle_adaptations
+    adaptations = get_cycle_adaptations(user.id, 'luteal', 0.9)
+    deadlift = [a for a in adaptations if 'Deadlift' in a['exercise_name']]
+    assert len(deadlift) == 1
+    assert deadlift[0]['ai_note'] is None
+    assert deadlift[0]['adapted_weight'] == 90.0  # 100 * 0.9
