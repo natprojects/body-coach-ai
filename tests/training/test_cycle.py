@@ -246,6 +246,21 @@ def test_ai_failure_falls_back_gracefully(app, db, mock_anthropic):
     assert deadlift[0]['adapted_weight'] == 90.0  # 100 * 0.9
 
 
+def test_ai_calls_capped_at_3(app, db, mock_anthropic):
+    """AI is called at most 3 times even when there are more compound exercises in luteal."""
+    user = _make_user_with_cycle(db, last_period_date=date.today() - timedelta(days=18))
+    _make_rec(db, user.id, 'Squat', 80.0, muscle_group='Legs')
+    _make_rec(db, user.id, 'Deadlift', 100.0, muscle_group='Back')
+    _make_rec(db, user.id, 'Bench Press', 60.0, muscle_group='Chest')
+    _make_rec(db, user.id, 'Overhead Press', 40.0, muscle_group='Shoulders')
+    mock_anthropic.messages.create.return_value = MagicMock(
+        content=[MagicMock(text='Спробуй варіацію.')]
+    )
+    from app.modules.training.cycle import get_cycle_adaptations
+    adaptations = get_cycle_adaptations(user.id, 'luteal', 0.9)
+    assert mock_anthropic.messages.create.call_count == 3
+
+
 def test_ai_note_for_plyometric_in_ovulation(app, db, mock_anthropic):
     """Ovulation + plyometric exercise → AI suggestion generated, weight unchanged."""
     user = _make_user_with_cycle(db, last_period_date=date.today() - timedelta(days=13))  # day 14 = ovulation

@@ -197,12 +197,14 @@ def _serialize_workout_with_sets(workout: Workout) -> dict:
 @require_auth
 def session_start():
     data = request.json or {}
+    _phase = data.get('cycle_phase')
+    _VALID_PHASES = {'menstrual', 'follicular', 'ovulation', 'luteal'}
     session = WorkoutSession(
         user_id=g.user_id,
         workout_id=data.get('workout_id'),
         date=date.today(),
         status='in_progress',
-        cycle_phase=data.get('cycle_phase'),
+        cycle_phase=_phase if _phase in _VALID_PHASES else None,
         cycle_adapted=bool(data.get('cycle_adapted', False)),
     )
     db.session.add(session)
