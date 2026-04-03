@@ -278,6 +278,7 @@ def test_ai_strategy_change_after_3_stagnations(app, db, mock_anthropic):
     assert len(strat_recs) == 1
     assert strat_recs[0].recommendation_type == 'change_strategy'
     assert 'паузний' in strat_recs[0].reason_text
+    mock_anthropic.messages.create.assert_called_once()
 
 
 def test_no_ai_call_for_first_stagnation(app, db, mock_anthropic):

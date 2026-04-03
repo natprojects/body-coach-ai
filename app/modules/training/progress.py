@@ -366,19 +366,25 @@ def analyze_session_and_recommend(session_id: int, user_id: int) -> list:
 
             if prior_stagnations >= 3:
                 rec_type = 'change_strategy'
-                from app.core.models import User as UserModel
-                u = db.session.get(UserModel, user_id)
-                lang = (getattr(u, 'app_language', 'en') or 'en')
+                lang = (getattr(user, 'app_language', 'en') or 'en')
                 lang_note = 'Відповідь ТІЛЬКИ українською.' if lang == 'uk' else 'Reply in English only.'
-                reason = complete(
-                    f'You are a strength coach. {lang_note} '
-                    'The athlete has been stagnating on this exercise for 3+ sessions with the same weight and reps. '
-                    'Suggest ONE specific technique variation to break the plateau. '
-                    'Be concrete: name the variation, the tempo or rep scheme. Max 20 words.',
-                    f'Exercise: {le.exercise.name}. Current: {last_weight}kg × {int(avg_reps)} reps × {len(current_sets)} sets. RPE {avg_rpe:.0f}.',
-                    max_tokens=60,
-                    model='claude-haiku-4-5-20251001',
-                ).strip()
+                try:
+                    reason = complete(
+                        f'You are a strength coach. {lang_note} '
+                        'The athlete has been stagnating on this exercise for 3+ sessions with the same weight and reps. '
+                        'Suggest ONE specific technique variation to break the plateau. '
+                        'Be concrete: name the variation, the tempo or rep scheme. Max 20 words.',
+                        f'Exercise: {le.exercise.name}. Current: {last_weight}kg × {int(avg_reps)} reps × {len(current_sets)} sets. RPE {avg_rpe:.0f}.',
+                        max_tokens=60,
+                        model='claude-haiku-4-5-20251001',
+                    ).strip()
+                except Exception:
+                    rec_type = 'stagnation'
+                    reason = (
+                        'Прогрес зупинився 3+ сесії поспіль. '
+                        'Зміни одну змінну: сповільни темп (3-1-3), '
+                        'збільши амплітуду, або додай підхід замість ваги.'
+                    )
             else:
                 rec_type = 'stagnation'
                 reason = (
