@@ -102,3 +102,46 @@ def get_cycle_phase(user_id: int) -> dict:
         'warnings': info['warnings'],
         'pr_allowed': info['pr_allowed'],
     }
+
+
+def get_cycle_adaptations(user_id: int, phase: str, modifier: float) -> list:
+    """Return weight adaptations for today's recommendations. Stub — AI added in Task 4."""
+    from app.modules.training.models import ExerciseRecommendation
+    from sqlalchemy import func
+
+    # Latest recommendation per exercise for this user
+    latest_subq = (
+        db.session.query(
+            ExerciseRecommendation.exercise_id,
+            func.max(ExerciseRecommendation.created_at).label('max_created'),
+        )
+        .filter_by(user_id=user_id)
+        .group_by(ExerciseRecommendation.exercise_id)
+        .subquery()
+    )
+    recs = (
+        ExerciseRecommendation.query
+        .join(latest_subq, db.and_(
+            ExerciseRecommendation.exercise_id == latest_subq.c.exercise_id,
+            ExerciseRecommendation.created_at == latest_subq.c.max_created,
+        ))
+        .filter(ExerciseRecommendation.user_id == user_id)
+        .limit(10)
+        .all()
+    )
+
+    adaptations = []
+    for rec in recs:
+        original = rec.recommended_weight_kg or 0
+        if original <= 0:
+            continue
+        adapted = round(original * modifier / 2.5) * 2.5
+        if adapted != original:
+            adaptations.append({
+                'exercise_name': rec.exercise.name,
+                'exercise_id': rec.exercise_id,
+                'original_weight': original,
+                'adapted_weight': adapted,
+                'ai_note': None,
+            })
+    return adaptations

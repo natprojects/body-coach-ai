@@ -124,3 +124,47 @@ def test_is_compound_detection():
     assert _is_compound('Bench Press') is True
     assert _is_compound('Bicep Curl') is False
     assert _is_compound('Leg Extension') is False
+
+
+from app.core.auth import create_jwt
+
+
+def _h(app, user_id):
+    return {'Authorization': f'Bearer {create_jwt(user_id, app.config["SECRET_KEY"])}'}
+
+
+def test_cycle_phase_endpoint_returns_data(client, app, db):
+    """GET /api/training/cycle/phase returns phase data for a user with tracking."""
+    user = _make_user_with_cycle(db, last_period_date=date.today() - timedelta(days=18))
+    r = client.get('/api/training/cycle/phase', headers=_h(app, user.id))
+    data = r.get_json()
+    assert data['success'] is True
+    assert data['data']['phase'] == 'luteal'
+    assert data['data']['show_card'] is True
+    assert 'adaptations' in data['data']
+
+
+def test_cycle_phase_endpoint_no_tracking(client, app, db):
+    """GET /api/training/cycle/phase returns show_card=False when tracking disabled."""
+    user = _make_user_with_cycle(db, menstrual_tracking=False,
+                                  last_period_date=date.today() - timedelta(days=18))
+    r = client.get('/api/training/cycle/phase', headers=_h(app, user.id))
+    data = r.get_json()
+    assert data['success'] is True
+    assert data['data']['show_card'] is False
+
+
+def test_session_start_saves_cycle_fields(client, app, db):
+    """POST /api/training/session/start saves cycle_phase and cycle_adapted."""
+    user = _make_user_with_cycle(db, last_period_date=date.today() - timedelta(days=18))
+    r = client.post(
+        '/api/training/session/start',
+        json={'cycle_phase': 'luteal', 'cycle_adapted': True},
+        headers=_h(app, user.id),
+    )
+    data = r.get_json()
+    assert data['success'] is True
+    from app.modules.training.models import WorkoutSession
+    session = WorkoutSession.query.get(data['data']['session_id'])
+    assert session.cycle_phase == 'luteal'
+    assert session.cycle_adapted is True
