@@ -218,9 +218,9 @@ def _check_is_deload_period(user_id: int) -> bool:
     """True if deload is needed AND no deload rec was created in the last 7 days."""
     if not check_deload_needed(user_id):
         return False
-    from datetime import date, timedelta
+    from datetime import datetime, timedelta
     from .models import ExerciseRecommendation
-    cutoff = date.today() - timedelta(days=7)
+    cutoff = datetime.utcnow() - timedelta(days=7)
     recent_deload = ExerciseRecommendation.query.filter(
         ExerciseRecommendation.user_id == user_id,
         ExerciseRecommendation.recommendation_type == 'deload',

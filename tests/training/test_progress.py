@@ -189,3 +189,50 @@ def test_no_deload_if_already_deloaded_this_week(app, db):
 
     # Should NOT be 'deload' since we just did one
     assert all(r.recommendation_type != 'deload' for r in recs)
+
+
+def test_decrease_high_rpe_with_pain(app, db):
+    """avg_rpe >= 9 + pain journal entry today → decrease weight by 10%."""
+    from app.core.models import PainJournal
+    user = _make_user(db)
+    ex = _make_exercise(db, 'Bench Press Pain')
+    w = _make_workout_with_planned(db, user.id, ex, target_reps='5-6', target_weight=100.0)
+    session = _make_session(db, user.id, status='in_progress')
+    session.workout_id = w.id
+    db.session.commit()
+    # RPE 9.5 + pain today
+    _log_sets(db, session, ex, [(5, 100.0, 9.5), (5, 100.0, 9.5)])
+    db.session.add(PainJournal(
+        user_id=user.id, date=date.today(),
+        body_part='shoulder', pain_type='soreness', intensity=4,
+    ))
+    session.status = 'completed'
+    db.session.commit()
+
+    from app.modules.training.progress import analyze_session_and_recommend
+    recs = analyze_session_and_recommend(session.id, user.id)
+
+    assert len(recs) == 1
+    assert recs[0].recommendation_type == 'decrease'
+    assert recs[0].recommended_weight_kg == 90.0  # 100 * 0.9, rounded to 2.5
+
+
+def test_stagnation_after_3_identical_sessions(app, db):
+    """Same weight + same total reps for 3 consecutive sessions → stagnation."""
+    user = _make_user(db)
+    ex = _make_exercise(db, 'Stagnation Bench')
+    # 2 previous completed sessions with identical sets
+    for i in range(1, 3):
+        prev = _make_session(db, user.id, status='completed', days_ago=i * 7)
+        _log_sets(db, prev, ex, [(8, 80.0, 7), (8, 80.0, 7), (8, 80.0, 7)])
+    # Current session: same weight, same reps
+    session = _make_session(db, user.id, status='in_progress')
+    _log_sets(db, session, ex, [(8, 80.0, 7), (8, 80.0, 7), (8, 80.0, 7)])
+    session.status = 'completed'
+    db.session.commit()
+
+    from app.modules.training.progress import analyze_session_and_recommend
+    recs = analyze_session_and_recommend(session.id, user.id)
+
+    assert len(recs) == 1
+    assert recs[0].recommendation_type == 'stagnation'
