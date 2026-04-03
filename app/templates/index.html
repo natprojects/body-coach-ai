@@ -1129,14 +1129,14 @@ function renderCycleCard() {
         ${p.adaptations.map(a => `
           <div style="margin-bottom:6px">
             <span style="font-size:13px">${_esc(a.exercise_name)}</span>
-            <span style="color:var(--muted);font-size:12px"> ${a.original_weight}kg → </span>
-            <span style="color:#4caf50;font-weight:700;font-size:13px">${a.adapted_weight}kg</span>
+            <span style="color:var(--muted);font-size:12px"> ${_esc(String(a.original_weight))}kg → </span>
+            <span style="color:#4caf50;font-weight:700;font-size:13px">${_esc(String(a.adapted_weight))}kg</span>
             ${a.ai_note ? `<div class="cycle-ai-note">💡 ${_esc(a.ai_note)}</div>` : ''}
           </div>`).join('')}
        </div>`
     : '';
   el.innerHTML = `
-    <div style="font-size:16px;font-weight:700;margin-bottom:4px">${icon} ${_esc(p.phase_title)} • день ${p.cycle_day}</div>
+    <div style="font-size:16px;font-weight:700;margin-bottom:4px">${icon} ${_esc(p.phase_title)} • день ${_esc(String(p.cycle_day))}</div>
     <div style="font-size:13px;color:var(--muted);line-height:1.5">${_esc(p.phase_description)}</div>
     ${warningsHtml}
     ${adaptationsHtml}`;
@@ -1693,6 +1693,7 @@ async function startWorkout() {
 
 async function applyAndStartWorkout() {
   closeOverlay('overlay-cycle');
+  if (!S.cyclePhase) { await _doStartWorkout(null); return; }
   S.cycleAdaptation = {
     modifier: S.cyclePhase.modifier,
     adaptations: S.cyclePhase.adaptations || [],
