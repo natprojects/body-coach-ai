@@ -490,6 +490,8 @@
       font-weight: 700; text-transform: uppercase; }
     .next-plan-target { font-size: 12px; color: var(--muted); }
     .next-plan-reason { font-size: 11px; color: #888; font-style: italic; }
+    .rec-card { background: var(--card); border: 1px solid var(--border);
+      border-radius: 8px; padding: 10px 12px; margin-bottom: 8px; }
   </style>
 </head>
 <body>
@@ -2001,21 +2003,43 @@ async function completeWorkout() {
 function renderNextSessionPlan() {
   const el = document.getElementById('next-session-plan');
   if (!el) return;
-  const plan = S.nextSessionPlan;
-  if (!plan?.length) { el.innerHTML = ''; return; }
-  const rows = plan.map(rec => {
-    const weightStr = rec.recommended_weight_kg ? `${rec.recommended_weight_kg}kg` : '';
-    const repsStr = (rec.recommended_reps_min && rec.recommended_reps_max)
-      ? `${rec.recommended_reps_min}–${rec.recommended_reps_max} reps`
-      : (rec.recommended_reps_min ? `${rec.recommended_reps_min}+ reps` : '');
-    const targetStr = [weightStr, repsStr].filter(Boolean).join(' × ');
-    return `<div class="next-plan-row">
-      <div class="next-plan-ex">${_esc(rec.exercise_name)}</div>
-      ${targetStr ? `<div class="next-plan-target">${_esc(targetStr)}</div>` : ''}
-      ${rec.reason_text ? `<div class="next-plan-reason">${_esc(rec.reason_text)}</div>` : ''}
-    </div>`;
-  }).join('');
-  el.innerHTML = `<div class="next-plan-title">Next Session Plan</div>${rows}`;
+  const recs = S.nextSessionPlan || [];
+  if (!recs.length) { el.style.display = 'none'; return; }
+  el.style.display = '';
+
+  const typeLabel = {
+    'increase_weight': { badge: '↑ ВАГА',         color: '#4caf50' },
+    'increase_reps':   { badge: '↑ ПОВТОРИ',      color: '#4caf50' },
+    'maintain':        { badge: '═ ТРИМАТИ',      color: '#888' },
+    'decrease':        { badge: '↓ ЗНИЖЕННЯ',     color: '#ff9800' },
+    'stagnation':      { badge: '⚠ СТАГНАЦІЯ',    color: '#ff9800' },
+    'change_strategy': { badge: '🔄 НОВА СТРАТЕГІЯ', color: '#9c27b0' },
+    'deload':          { badge: '💤 DELOAD',       color: '#2196f3' },
+  };
+
+  el.innerHTML = `
+    <div class="next-plan-title">НАСТУПНЕ ТРЕНУВАННЯ</div>
+    ${recs.map(r => {
+      const t = typeLabel[r.recommendation_type] || { badge: r.recommendation_type, color: '#888' };
+      const weightLine = r.recommendation_type === 'deload'
+        ? `<span style="color:#2196f3;font-weight:700">${r.recommended_weight_kg}kg (−40%)</span>`
+        : r.recommended_weight_kg
+          ? `<span>${r.recommended_weight_kg}kg</span>`
+          : '';
+      const repsLine = (r.recommended_reps_min && r.recommended_reps_max)
+        ? `<span style="color:var(--muted)">${r.recommended_reps_min}–${r.recommended_reps_max} повт</span>`
+        : '';
+      return `
+        <div class="rec-card">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+            <span style="font-size:13px;font-weight:600">${_esc(r.exercise_name)}</span>
+            <span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:10px;
+              background:${t.color}22;color:${t.color}">${t.badge}</span>
+          </div>
+          ${weightLine || repsLine ? `<div style="font-size:13px;display:flex;gap:10px;margin-bottom:4px">${weightLine}${repsLine}</div>` : ''}
+          ${r.reason_text ? `<div style="font-size:12px;color:var(--muted);line-height:1.4">${_esc(r.reason_text)}</div>` : ''}
+        </div>`;
+    }).join('')}`;
 }
 
 async function openWeeklyReport() {
