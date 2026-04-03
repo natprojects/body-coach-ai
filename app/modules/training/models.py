@@ -111,6 +111,8 @@ class WorkoutSession(db.Model):
     status = db.Column(db.String(20), default='in_progress')  # in_progress / completed
     notes = db.Column(db.Text)
     ai_feedback = db.Column(db.Text)
+    cycle_phase = db.Column(db.String(20), nullable=True)
+    cycle_adapted = db.Column(db.Boolean, default=False)
     last_exercise_id = db.Column(db.Integer, db.ForeignKey('exercises.id'), nullable=True)
 
     logged_exercises = db.relationship('LoggedExercise', backref='session',
