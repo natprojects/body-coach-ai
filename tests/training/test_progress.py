@@ -271,7 +271,8 @@ def test_ai_strategy_change_after_3_stagnations(app, db, mock_anthropic):
     db.session.commit()
 
     from app.modules.training.progress import analyze_session_and_recommend
-    recs = analyze_session_and_recommend(session.id, user.id)
+    with patch('app.modules.training.progress.check_deload_needed', return_value=False):
+        recs = analyze_session_and_recommend(session.id, user.id)
 
     strat_recs = [r for r in recs if r.exercise_id == ex.id]
     assert len(strat_recs) == 1
@@ -293,7 +294,8 @@ def test_no_ai_call_for_first_stagnation(app, db, mock_anthropic):
     db.session.commit()
 
     from app.modules.training.progress import analyze_session_and_recommend
-    recs = analyze_session_and_recommend(session.id, user.id)
+    with patch('app.modules.training.progress.check_deload_needed', return_value=False):
+        recs = analyze_session_and_recommend(session.id, user.id)
 
     stag_recs = [r for r in recs if r.exercise_id == ex.id]
     assert stag_recs[0].recommendation_type == 'stagnation'

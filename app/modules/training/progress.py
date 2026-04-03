@@ -215,8 +215,7 @@ def generate_weekly_report(user_id: int, week_sessions: list) -> str:
 
 
 def _check_is_deload_period(user_id: int) -> bool:
-    """True if deload is needed AND no deload rec was created in the last 7 days
-    AND the user is not already in an AI-managed change_strategy cycle (3+ stagnation/change_strategy recs)."""
+    """True if deload is needed AND no deload rec was created in the last 7 days."""
     if not check_deload_needed(user_id):
         return False
     from datetime import datetime, timedelta
@@ -227,17 +226,7 @@ def _check_is_deload_period(user_id: int) -> bool:
         ExerciseRecommendation.recommendation_type == 'deload',
         ExerciseRecommendation.created_at >= cutoff,
     ).first()
-    if recent_deload is not None:
-        return False
-    # Suppress deload if AI change_strategy cycle is already active (3+ chronic stagnation recs)
-    chronic_stagnation_count = ExerciseRecommendation.query.filter(
-        ExerciseRecommendation.user_id == user_id,
-        ExerciseRecommendation.recommendation_type.in_(('stagnation', 'change_strategy')),
-        ExerciseRecommendation.created_at >= cutoff,
-    ).count()
-    if chronic_stagnation_count >= 3:
-        return False
-    return True
+    return recent_deload is None
 
 
 def analyze_session_and_recommend(session_id: int, user_id: int) -> list:
