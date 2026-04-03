@@ -1,8 +1,10 @@
 # tests/training/test_cycle.py
 from datetime import date, datetime, timedelta
 import pytest
+from unittest.mock import MagicMock
 from app.core.models import DailyCheckin, User
 from app.core.auth import create_jwt
+from app.modules.training.models import Exercise, ExerciseRecommendation
 
 
 def _make_user_with_cycle(db, last_period_date=None, cycle_length_days=28,
@@ -168,11 +170,6 @@ def test_session_start_saves_cycle_fields(client, app, db):
     assert session.cycle_adapted is True
 
 
-from unittest.mock import MagicMock, patch
-from app.modules.training.models import Exercise, ExerciseRecommendation
-from datetime import datetime as dt
-
-
 def _make_rec(db, user_id, exercise_name, weight, muscle_group='Chest'):
     ex = Exercise(name=exercise_name, muscle_group=muscle_group)
     db.session.add(ex)
@@ -189,10 +186,13 @@ def _make_rec(db, user_id, exercise_name, weight, muscle_group='Chest'):
     return rec
 
 
-def test_luteal_applies_weight_modifier(app, db):
+def test_luteal_applies_weight_modifier(app, db, mock_anthropic):
     """Luteal phase: weights reduced by 10%."""
     user = _make_user_with_cycle(db, last_period_date=date.today() - timedelta(days=18))
     _make_rec(db, user.id, 'Bench Press', 60.0)
+    mock_anthropic.messages.create.return_value = MagicMock(
+        content=[MagicMock(text='Спробуй дамбелі 22kg × 10.')]
+    )
     from app.modules.training.cycle import get_cycle_adaptations
     adaptations = get_cycle_adaptations(user.id, 'luteal', 0.9)
     assert len(adaptations) == 1
@@ -244,3 +244,22 @@ def test_ai_failure_falls_back_gracefully(app, db, mock_anthropic):
     assert len(deadlift) == 1
     assert deadlift[0]['ai_note'] is None
     assert deadlift[0]['adapted_weight'] == 90.0  # 100 * 0.9
+
+
+def test_ai_note_for_plyometric_in_ovulation(app, db, mock_anthropic):
+    """Ovulation + plyometric exercise → AI suggestion generated, weight unchanged."""
+    user = _make_user_with_cycle(db, last_period_date=date.today() - timedelta(days=13))  # day 14 = ovulation
+    _make_rec(db, user.id, 'Box Jump', 0.0, muscle_group='Legs')  # bodyweight plyometric, weight=0
+    # weight=0 is skipped by get_cycle_adaptations (original <= 0), so use a small weight
+    _make_rec(db, user.id, 'Jump Squat', 20.0, muscle_group='Legs')
+    mock_anthropic.messages.create.return_value = MagicMock(
+        content=[MagicMock(text='Заміни на step-up 20kg × 12.')]
+    )
+    from app.modules.training.cycle import get_cycle_adaptations
+    adaptations = get_cycle_adaptations(user.id, 'ovulation', 1.0)
+    jump = [a for a in adaptations if 'Jump' in a['exercise_name']]
+    assert len(jump) == 1
+    assert jump[0]['original_weight'] == 20.0
+    assert jump[0]['adapted_weight'] == 20.0  # ovulation modifier=1.0, no weight change
+    assert jump[0]['ai_note'] == 'Заміни на step-up 20kg × 12.'
+    mock_anthropic.messages.create.assert_called_once()
