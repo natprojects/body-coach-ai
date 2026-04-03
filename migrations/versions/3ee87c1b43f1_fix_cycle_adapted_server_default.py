@@ -17,6 +17,8 @@ depends_on = None
 
 
 def upgrade():
+    # Clean up orphan temp table left by a previously failed migration run
+    op.execute("DROP TABLE IF EXISTS _alembic_tmp_workout_sessions")
     # Fill existing NULLs before adding NOT NULL constraint
     op.execute("UPDATE workout_sessions SET cycle_adapted = 0 WHERE cycle_adapted IS NULL")
     with op.batch_alter_table('workout_sessions', schema=None) as batch_op:
