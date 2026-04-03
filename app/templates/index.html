@@ -268,6 +268,13 @@
     .ex-action-btn:active { color: var(--accent); }
 
     /* ── COACH TAB ── */
+    .coach-md-header { font-weight: 700; font-size: 14px; color: var(--text);
+      margin: 14px 0 5px; line-height: 1.4; }
+    .coach-md-header:first-child { margin-top: 0; }
+    .coach-md-bullet { display: flex; gap: 7px; font-size: 14px; color: #ccc;
+      margin-bottom: 5px; line-height: 1.55; }
+    .coach-md-bullet-dot { color: var(--accent); flex-shrink: 0; }
+    .coach-md-text { font-size: 14px; color: #ccc; margin-bottom: 5px; line-height: 1.6; }
     #panel-coach { overflow: hidden; padding: 0; gap: 0; }
     #coach-list-view { display: flex; flex-direction: column; height: 100%; overflow: hidden; }
     #coach-thread-view { display: none; flex-direction: column; height: 100%; overflow: hidden; }
@@ -1935,6 +1942,24 @@ function parseTechniqueMarkdown(text) {
   return html;
 }
 
+function parseCoachMarkdown(text) {
+  const lines = text.split('\n');
+  let html = '';
+  for (const raw of lines) {
+    const line = raw.trim();
+    if (!line) { html += '<div style="height:6px"></div>'; continue; }
+    const inline = t => _esc(t).replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+    if (/^#{1,3}\s/.test(line)) {
+      html += `<div class="coach-md-header">${inline(line.replace(/^#{1,3}\s*/, ''))}</div>`;
+    } else if (/^[-•*]\s/.test(line)) {
+      html += `<div class="coach-md-bullet"><span class="coach-md-bullet-dot">▸</span><span>${inline(line.replace(/^[-•*]\s*/, ''))}</span></div>`;
+    } else {
+      html += `<div class="coach-md-text">${inline(line)}</div>`;
+    }
+  }
+  return html;
+}
+
 function openTechnique(exerciseId, exName) {
   document.getElementById('technique-ex-name').textContent = exName;
   const body = document.getElementById('technique-body');
@@ -2054,11 +2079,9 @@ function _coachRelDate(isoStr) {
   return diffD + ' дн тому';
 }
 
-async function newCoachThread() {
+function newCoachThread() {
   haptic();
-  const r = await api('POST', '/api/coach/threads');
-  if (!r.success) return;
-  S.activeThread = {id: r.data.thread_id, title: 'Нова розмова', messages: []};
+  S.activeThread = {id: null, title: 'Нова розмова', messages: []};
   _showCoachThread();
 }
 
@@ -2076,7 +2099,7 @@ async function openCoachThread(id) {
 function showCoachList() {
   document.getElementById('coach-thread-view').style.display = 'none';
   document.getElementById('coach-list-view').style.display = 'flex';
-  loadCoachTab();
+  if (S.activeThread?.id) loadCoachTab(); else renderCoachList();
 }
 
 function _showCoachThread() {
@@ -2118,7 +2141,7 @@ function _renderCoachMessages() {
     if (m.role === 'user') {
       return `<div class="coach-msg-user"><span>${_esc(m.content)}</span></div>`;
     }
-    return `<div class="coach-msg-ai">${parseTechniqueMarkdown(m.content)}</div>`;
+    return `<div class="coach-msg-ai">${parseCoachMarkdown(m.content)}</div>`;
   }).join('');
 }
 
@@ -2126,6 +2149,13 @@ async function sendCoachMessage() {
   const input = document.getElementById('coach-input');
   const msg = (input.value || '').trim();
   if (!msg || S.coachStreaming || !S.activeThread) return;
+
+  // Create thread lazily on first message
+  if (!S.activeThread.id) {
+    const cr = await api('POST', '/api/coach/threads');
+    if (!cr.success) return;
+    S.activeThread.id = cr.data.thread_id;
+  }
 
   const isFirst = !(S.activeThread.messages?.length);
 
@@ -2177,7 +2207,7 @@ async function sendCoachMessage() {
         const chunk = line.slice(6);
         if (chunk === '[DONE]') break;
         aiText += chunk;
-        aiBubble.innerHTML = parseTechniqueMarkdown(aiText) + '<span class="coach-cursor">▌</span>';
+        aiBubble.innerHTML = parseCoachMarkdown(aiText) + '<span class="coach-cursor">▌</span>';
         container.scrollTop = container.scrollHeight;
       }
     }
@@ -2186,7 +2216,7 @@ async function sendCoachMessage() {
   }
 
   // Finalize bubble (remove cursor)
-  aiBubble.innerHTML = parseTechniqueMarkdown(aiText);
+  aiBubble.innerHTML = parseCoachMarkdown(aiText);
   container.scrollTop = container.scrollHeight;
 
   S.coachStreaming = false;
