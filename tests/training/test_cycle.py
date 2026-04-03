@@ -104,3 +104,23 @@ def test_cycle_wraps_correctly(app, db):
     result = get_cycle_phase(user.id)
     assert result['cycle_day'] == 1
     assert result['phase'] == 'menstrual'
+
+
+def test_is_plyometric_detection():
+    """Keywords like 'jump', 'burpee', 'стрибок' are detected as plyometric."""
+    from app.modules.training.cycle import _is_plyometric
+    assert _is_plyometric('Box Jump') is True
+    assert _is_plyometric('Burpee') is True
+    assert _is_plyometric('стрибок') is True
+    assert _is_plyometric('Bench Press') is False
+    assert _is_plyometric('Squat') is False
+
+
+def test_is_compound_detection():
+    """Keywords like 'squat', 'deadlift', 'bench press' are detected as compound."""
+    from app.modules.training.cycle import _is_compound
+    assert _is_compound('Back Squat') is True
+    assert _is_compound('Romanian Deadlift') is True
+    assert _is_compound('Bench Press') is True
+    assert _is_compound('Bicep Curl') is False
+    assert _is_compound('Leg Extension') is False
