@@ -29,6 +29,8 @@ def calc_bmr(weight_kg: float, height_cm: float, age: int, gender: str) -> float
 
 
 def calc_tdee(bmr: float, activity_outside: str, training_days_per_week: int) -> float:
+    if activity_outside not in BASE_FACTORS:
+        raise ValueError(f"Unknown activity_outside: {activity_outside!r}")
     base = BASE_FACTORS[activity_outside]
     bonus = _training_bonus(training_days_per_week)
     return bmr * (base + bonus)
@@ -46,5 +48,5 @@ def calc_macros(weight_kg: float, calorie_target: float) -> dict:
     return {'protein_g': protein_g, 'fat_g': fat_g, 'carbs_g': carbs_g}
 
 
-def calc_water_ml(weight_kg: float) -> float:
+def calc_water_ml(weight_kg: float) -> int:
     return round(weight_kg * 32.5)

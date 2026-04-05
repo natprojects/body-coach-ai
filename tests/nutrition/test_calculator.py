@@ -64,7 +64,7 @@ def test_macros_standard():
 def test_macros_no_negative_carbs():
     # very high body weight, low calories → carbs clamped to 0
     result = calc_macros(120.0, 1200.0)
-    assert result['carbs_g'] >= 0
+    assert result['carbs_g'] == 0.0
 
 
 def test_water_ml():
