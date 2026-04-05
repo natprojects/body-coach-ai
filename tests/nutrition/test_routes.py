@@ -1,9 +1,9 @@
 # tests/nutrition/test_routes.py
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 import pytest
 from app.core.models import User
+from app.core.auth import create_jwt
 from app.modules.nutrition.models import NutritionProfile, MealLog
-from app.extensions import db as _db
 
 
 def _make_user(db):
@@ -17,6 +17,12 @@ def _make_user(db):
     db.session.commit()
     return u
 
+
+def _h(app, user_id):
+    return {'Authorization': f'Bearer {create_jwt(user_id, app.config["SECRET_KEY"])}'}
+
+
+# ── Model tests (from Task 3) ──────────────────────────────────────────────────
 
 def test_nutrition_profile_creation(app, db):
     user = _make_user(db)
@@ -40,4 +46,66 @@ def test_meal_log_creation(app, db):
     db.session.add(log)
     db.session.commit()
     fetched = MealLog.query.filter_by(user_id=user.id).first()
+    assert fetched is not None
     assert fetched.description == 'Гречка з куркою'
+
+
+# ── Profile route tests ────────────────────────────────────────────────────────
+
+def test_get_profile_no_profile(app, client, db):
+    user = _make_user(db)
+    r = client.get('/api/nutrition/profile', headers=_h(app, user.id))
+    assert r.status_code == 200
+    data = r.get_json()
+    assert data['success'] is True
+    assert data['data'] is None
+
+
+def test_get_profile_missing_weight(app, client, db):
+    u = User(telegram_id=50002, name='NoWeight', onboarding_completed_at=datetime.utcnow())
+    db.session.add(u)
+    db.session.commit()
+    r = client.get('/api/nutrition/profile', headers=_h(app, u.id))
+    assert r.status_code == 400
+    assert 'onboarding' in r.get_json()['error']['message'].lower()
+
+
+def test_post_profile_creates_and_calculates(app, client, db):
+    user = _make_user(db)  # female, 65kg, 168cm, age 28, fat_loss, 3 days/week
+    body = {
+        'diet_type': 'omnivore',
+        'allergies': ['lactose'],
+        'cooking_skill': 'beginner',
+        'budget': 'medium',
+        'activity_outside': 'sedentary',
+    }
+    r = client.post('/api/nutrition/profile', json=body, headers=_h(app, user.id))
+    assert r.status_code == 200
+    data = r.get_json()['data']
+    assert data['diet_type'] == 'omnivore'
+    assert data['allergies'] == ['lactose']
+    assert data['calorie_target'] > 0
+    assert data['protein_g'] == 130.0   # 2.0 * 65
+    assert data['water_ml'] == 2112     # 65 * 32.5 = 2112 (int from calc_water_ml)
+
+
+def test_post_profile_upserts(app, client, db):
+    user = _make_user(db)
+    body = {'diet_type': 'vegan', 'allergies': [], 'cooking_skill': 'advanced',
+            'budget': 'high', 'activity_outside': 'moderately'}
+    client.post('/api/nutrition/profile', json=body, headers=_h(app, user.id))
+    body['diet_type'] = 'vegetarian'
+    r = client.post('/api/nutrition/profile', json=body, headers=_h(app, user.id))
+    assert r.get_json()['data']['diet_type'] == 'vegetarian'
+    assert NutritionProfile.query.filter_by(user_id=user.id).count() == 1
+
+
+def test_get_profile_returns_water_ml(app, client, db):
+    user = _make_user(db)
+    body = {'diet_type': 'omnivore', 'allergies': [], 'cooking_skill': 'intermediate',
+            'budget': 'medium', 'activity_outside': 'lightly'}
+    client.post('/api/nutrition/profile', json=body, headers=_h(app, user.id))
+    r = client.get('/api/nutrition/profile', headers=_h(app, user.id))
+    data = r.get_json()['data']
+    assert 'water_ml' in data
+    assert data['water_ml'] == 2112   # 65 * 32.5 = 2112 (int)
