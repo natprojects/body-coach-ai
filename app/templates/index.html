@@ -331,6 +331,49 @@
       border-radius: 50%; color: #fff; font-size: 17px; cursor: pointer; flex-shrink: 0;
       display: flex; align-items: center; justify-content: center; transition: opacity .15s; }
     .coach-send-btn:disabled { opacity: .35; cursor: default; }
+    /* ── Nutrition ── */
+    #panel-nutrition { overflow: hidden; padding: 0; gap: 0; flex-direction: column; }
+    #nutrition-setup { display: flex; flex-direction: column; align-items: center;
+      justify-content: center; height: 100%; padding: 24px; }
+    .nutr-setup-step { display: none; flex-direction: column; align-items: center;
+      width: 100%; gap: 12px; }
+    .nutr-setup-step.active { display: flex; }
+    .nutr-setup-title { font-family: 'Barlow Condensed', sans-serif; font-size: 22px;
+      color: var(--text); text-align: center; margin-bottom: 8px; }
+    .nutr-setup-opts { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center;
+      width: 100%; }
+    .nutr-opt-btn { background: var(--card); border: 1px solid var(--border);
+      border-radius: 8px; color: var(--text); padding: 10px 16px; font-size: 14px;
+      cursor: pointer; }
+    .nutr-opt-btn.selected { border-color: var(--accent); color: var(--accent); }
+    .nutr-opt-btn:active { background: var(--surface); }
+    .nutr-skip-btn { background: none; border: none; color: var(--muted); font-size: 13px;
+      margin-top: 4px; cursor: pointer; }
+    #nutrition-main { display: none; flex-direction: column; height: 100%; overflow: hidden; }
+    .nutr-targets-card { display: flex; gap: 18px; align-items: center; padding: 10px 16px;
+      border-bottom: 1px solid var(--border); flex-shrink: 0; flex-wrap: wrap; }
+    .nutr-target-item { font-size: 13px; color: var(--muted); }
+    .nutr-target-val { font-family: 'Barlow Condensed', sans-serif; font-size: 16px;
+      color: var(--text); }
+    .nutr-messages { flex: 1; overflow-y: auto; padding: 14px 14px 8px;
+      display: flex; flex-direction: column; gap: 10px; }
+    .nutr-msg-user { align-self: flex-end; background: var(--accent); color: #fff;
+      border-radius: 12px 12px 4px 12px; padding: 8px 12px; max-width: 80%; font-size: 14px; }
+    .nutr-msg-ai { align-self: flex-start; background: var(--card);
+      border-radius: 12px 12px 12px 4px; padding: 8px 12px; max-width: 90%;
+      font-size: 14px; color: var(--text); line-height: 1.5; }
+    .nutr-input-area { display: flex; align-items: flex-end; gap: 8px; padding: 10px 14px;
+      border-top: 1px solid var(--border); flex-shrink: 0; }
+    #nutr-input { flex: 1; background: var(--card); border: 1px solid var(--border);
+      border-radius: 8px; color: var(--text); font-size: 14px; padding: 8px 12px;
+      resize: none; max-height: 80px; }
+    #nutr-input:focus { border-color: var(--accent); outline: none; }
+    .nutr-send-btn { width: 38px; height: 38px; background: var(--accent); border: none;
+      border-radius: 50%; color: #fff; font-size: 18px; cursor: pointer; flex-shrink: 0; }
+    .nutr-send-btn:disabled { opacity: .35; cursor: default; }
+    .nutr-log-btn { width: 38px; height: 38px; background: var(--card);
+      border: 1px solid var(--border); border-radius: 50%; color: var(--accent);
+      font-size: 16px; cursor: pointer; flex-shrink: 0; }
 
     @keyframes blink { 0%,100%{opacity:1}50%{opacity:0} }
     .coach-cursor { display: inline-block; animation: blink 1s infinite; }
@@ -582,7 +625,66 @@
       <div id="program-content"><!-- dynamic --></div>
     </div>
     <div class="tab-panel" id="panel-nutrition">
-      <div class="coming-soon"><div class="cs-line"></div><div class="cs-text">Nutrition</div><div class="cs-line"></div></div>
+      <!-- Setup wizard (shown on first open) -->
+      <div id="nutrition-setup">
+        <div class="nutr-setup-step active" id="nutr-step-1">
+          <div class="nutr-setup-title">Який тип дієти?</div>
+          <div class="nutr-setup-opts">
+            <button class="nutr-opt-btn" onclick="nutrSelectOpt(this,'diet_type','omnivore')">Всеїдний</button>
+            <button class="nutr-opt-btn" onclick="nutrSelectOpt(this,'diet_type','vegetarian')">Вегетаріанець</button>
+            <button class="nutr-opt-btn" onclick="nutrSelectOpt(this,'diet_type','vegan')">Веган</button>
+            <button class="nutr-opt-btn" onclick="nutrSelectOpt(this,'diet_type','pescatarian')">Пескетаріанець</button>
+          </div>
+        </div>
+        <div class="nutr-setup-step" id="nutr-step-2">
+          <div class="nutr-setup-title">Алергії або непереносимості?</div>
+          <div class="nutr-setup-opts">
+            <button class="nutr-opt-btn" onclick="nutrToggleAllergy(this,'gluten')">Глютен</button>
+            <button class="nutr-opt-btn" onclick="nutrToggleAllergy(this,'lactose')">Лактоза</button>
+            <button class="nutr-opt-btn" onclick="nutrToggleAllergy(this,'nuts')">Горіхи</button>
+            <button class="nutr-opt-btn" onclick="nutrToggleAllergy(this,'eggs')">Яйця</button>
+            <button class="nutr-opt-btn" onclick="nutrToggleAllergy(this,'shellfish')">Морепродукти</button>
+            <button class="nutr-opt-btn" onclick="nutrToggleAllergy(this,'soy')">Соя</button>
+          </div>
+          <button class="nutr-skip-btn" onclick="nutrNextStep(2)">Пропустити →</button>
+          <button class="btn" onclick="nutrNextStep(2)" style="margin-top:8px;width:100%">Далі →</button>
+        </div>
+        <div class="nutr-setup-step" id="nutr-step-3">
+          <div class="nutr-setup-title">Активність поза тренуваннями?</div>
+          <div class="nutr-setup-opts">
+            <button class="nutr-opt-btn" onclick="nutrSelectOpt(this,'activity_outside','sedentary')">Сидяча</button>
+            <button class="nutr-opt-btn" onclick="nutrSelectOpt(this,'activity_outside','lightly')">Легка</button>
+            <button class="nutr-opt-btn" onclick="nutrSelectOpt(this,'activity_outside','moderately')">Помірна</button>
+            <button class="nutr-opt-btn" onclick="nutrSelectOpt(this,'activity_outside','very')">Висока</button>
+          </div>
+        </div>
+        <div class="nutr-setup-step" id="nutr-step-4">
+          <div class="nutr-setup-title">Кулінарні навички?</div>
+          <div class="nutr-setup-opts">
+            <button class="nutr-opt-btn" onclick="nutrSelectOpt(this,'cooking_skill','beginner')">Початківець</button>
+            <button class="nutr-opt-btn" onclick="nutrSelectOpt(this,'cooking_skill','intermediate')">Середній</button>
+            <button class="nutr-opt-btn" onclick="nutrSelectOpt(this,'cooking_skill','advanced')">Досвідчений</button>
+          </div>
+        </div>
+        <div class="nutr-setup-step" id="nutr-step-5">
+          <div class="nutr-setup-title">Харчовий бюджет?</div>
+          <div class="nutr-setup-opts">
+            <button class="nutr-opt-btn" onclick="nutrSelectOpt(this,'budget','low')">Низький</button>
+            <button class="nutr-opt-btn" onclick="nutrSelectOpt(this,'budget','medium')">Середній</button>
+            <button class="nutr-opt-btn" onclick="nutrSelectOpt(this,'budget','high')">Високий</button>
+          </div>
+        </div>
+      </div>
+      <!-- Main view (after setup) -->
+      <div id="nutrition-main">
+        <div class="nutr-targets-card" id="nutr-targets-card"></div>
+        <div class="nutr-messages" id="nutr-messages"></div>
+        <div class="nutr-input-area">
+          <textarea id="nutr-input" placeholder="Що є в холодильнику?" rows="1"></textarea>
+          <button class="nutr-log-btn" id="nutr-log-btn" onclick="logLastNutrMeal()" title="Записати як прийом їжі">&#x2713;</button>
+          <button class="nutr-send-btn" id="nutr-send-btn" onclick="sendNutrMessage()">&#x2191;</button>
+        </div>
+      </div>
     </div>
     <div class="tab-panel" id="panel-sleep">
       <div class="coming-soon"><div class="cs-line"></div><div class="cs-text">Sleep</div><div class="cs-line"></div></div>
@@ -821,6 +923,8 @@ const S = {
   coachStreaming: false,
   cyclePhase: null,      // phase data from GET /api/training/cycle/phase
   cycleAdaptation: null, // { modifier, adaptations } when user chose "Adapt"
+  nutritionProfile: null,   // profile + targets from GET /api/nutrition/profile
+  lastNutrAiMessage: null,  // last AI response text (for ✓ log button)
   user: null,            // cached /api/users/me data
 };
 
@@ -1673,6 +1777,139 @@ async function switchTab(name) {
   }
   if (name === 'program') loadProgramTab();
   if (name === 'coach') loadCoachTab();
+  if (name === 'nutrition') loadNutritionTab();
+}
+
+// ── NUTRITION ──
+const _nutrData = {diet_type: null, allergies: [], activity_outside: null, cooking_skill: null, budget: null};
+
+function nutrSelectOpt(btn, field, value) {
+  const step = btn.closest('.nutr-setup-step');
+  step.querySelectorAll('.nutr-opt-btn').forEach(b => b.classList.remove('selected'));
+  btn.classList.add('selected');
+  _nutrData[field] = value;
+  const stepNum = parseInt(step.id.replace('nutr-step-', ''));
+  setTimeout(() => nutrNextStep(stepNum), 300);
+}
+
+function nutrToggleAllergy(btn, allergy) {
+  btn.classList.toggle('selected');
+  if (btn.classList.contains('selected')) {
+    if (!_nutrData.allergies.includes(allergy)) _nutrData.allergies.push(allergy);
+  } else {
+    _nutrData.allergies = _nutrData.allergies.filter(a => a !== allergy);
+  }
+}
+
+function nutrNextStep(currentStep) {
+  document.getElementById('nutr-step-' + currentStep).classList.remove('active');
+  if (currentStep < 5) {
+    document.getElementById('nutr-step-' + (currentStep + 1)).classList.add('active');
+  } else {
+    _submitNutrSetup();
+  }
+}
+
+async function _submitNutrSetup() {
+  const r = await api('POST', '/api/nutrition/profile', _nutrData);
+  if (r.success) { S.nutritionProfile = r.data; renderNutritionTab(); }
+}
+
+async function loadNutritionTab() {
+  const r = await api('GET', '/api/nutrition/profile');
+  if (!r.success) return;
+  if (!r.data) { renderNutritionSetup(); return; }
+  S.nutritionProfile = r.data;
+  renderNutritionTab();
+}
+
+function renderNutritionSetup() {
+  document.getElementById('nutrition-setup').style.display = 'flex';
+  document.getElementById('nutrition-main').style.display = 'none';
+  document.querySelectorAll('.nutr-setup-step').forEach(s => s.classList.remove('active'));
+  document.getElementById('nutr-step-1').classList.add('active');
+}
+
+async function renderNutritionTab() {
+  document.getElementById('nutrition-setup').style.display = 'none';
+  document.getElementById('nutrition-main').style.display = 'flex';
+  const p = S.nutritionProfile;
+  const water = (p.water_ml / 1000).toFixed(2);
+  document.getElementById('nutr-targets-card').innerHTML =
+    '<span class="nutr-target-item">\uD83D\uDD25 <span class="nutr-target-val">' + Math.round(p.calorie_target) + '</span> \u043a\u043a\u0430\u043b</span>' +
+    '<span class="nutr-target-item">\uD83E\uDD69 <span class="nutr-target-val">' + Math.round(p.protein_g) + '\u0433</span></span>' +
+    '<span class="nutr-target-item">\uD83D\uDCA7 <span class="nutr-target-val">' + water + '\u043b</span></span>';
+  const cr = await api('GET', '/api/nutrition/chat/thread');
+  if (cr.success) _renderNutrMessages(cr.data.messages);
+}
+
+function _renderNutrMessages(messages) {
+  const container = document.getElementById('nutr-messages');
+  container.innerHTML = '';
+  for (const m of messages) {
+    const div = document.createElement('div');
+    div.className = m.role === 'user' ? 'nutr-msg-user' : 'nutr-msg-ai';
+    div.textContent = m.content;
+    container.appendChild(div);
+  }
+  container.scrollTop = container.scrollHeight;
+}
+
+async function sendNutrMessage() {
+  const input = document.getElementById('nutr-input');
+  const content = input.value.trim();
+  if (!content) return;
+  const sendBtn = document.getElementById('nutr-send-btn');
+  sendBtn.disabled = true;
+  input.value = '';
+  const container = document.getElementById('nutr-messages');
+
+  const userDiv = document.createElement('div');
+  userDiv.className = 'nutr-msg-user';
+  userDiv.textContent = content;
+  container.appendChild(userDiv);
+
+  const aiDiv = document.createElement('div');
+  aiDiv.className = 'nutr-msg-ai';
+  container.appendChild(aiDiv);
+  container.scrollTop = container.scrollHeight;
+
+  let fullText = '';
+  try {
+    const resp = await fetch('/api/nutrition/chat/message', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer ' + S.jwt},
+      body: JSON.stringify({content}),
+    });
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder();
+    while (true) {
+      const {done, value} = await reader.read();
+      if (done) break;
+      for (const line of decoder.decode(value).split('\n')) {
+        if (!line.startsWith('data: ')) continue;
+        const chunk = line.slice(6);
+        if (chunk === '[DONE]') break;
+        fullText += chunk + ' ';
+        aiDiv.textContent = fullText;
+        container.scrollTop = container.scrollHeight;
+      }
+    }
+    S.lastNutrAiMessage = fullText.trim();
+  } finally {
+    sendBtn.disabled = false;
+  }
+}
+
+async function logLastNutrMeal() {
+  if (!S.lastNutrAiMessage) return;
+  const description = S.lastNutrAiMessage.slice(0, 200);
+  const r = await api('POST', '/api/nutrition/meals/log', {description});
+  if (r.success) {
+    const btn = document.getElementById('nutr-log-btn');
+    btn.textContent = '\u2713\u2713';
+    setTimeout(() => { btn.textContent = '\u2713'; }, 1500);
+  }
 }
 
 // ── SESSION ──
