@@ -22,6 +22,9 @@ def create_app(config_class=Config):
     from .modules.coach import bp as coach_bp
     app.register_blueprint(coach_bp, url_prefix='/api')
 
+    from .modules.nutrition import bp as nutrition_bp
+    app.register_blueprint(nutrition_bp, url_prefix='/api')
+
     @app.route('/')
     def index():
         return render_template('index.html')
