@@ -1,5 +1,4 @@
 from datetime import date, timedelta
-from app.extensions import db
 from app.core.models import User, DailyCheckin
 from app.modules.nutrition.models import NutritionProfile, MealLog
 

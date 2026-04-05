@@ -2,10 +2,12 @@ from datetime import date, timedelta
 from flask import g, jsonify, request, Response, stream_with_context
 from app.core.auth import require_auth
 from app.core.models import User, AIConversation
+from app.core.ai import stream_chat
 from app.extensions import db
 from . import bp
 from .models import NutritionProfile, MealLog
 from .calculator import calc_bmr, calc_tdee, calc_calorie_target, calc_macros, calc_water_ml
+from .context import build_nutrition_context
 
 
 def _compute_and_save(profile: NutritionProfile, user: User) -> None:
@@ -117,3 +119,40 @@ def get_meal_log():
         }
         for e in entries
     ]})
+
+
+@bp.route('/nutrition/chat/thread', methods=['GET'])
+@require_auth
+def get_nutrition_thread():
+    messages = (AIConversation.query
+                .filter_by(user_id=g.user_id, module='nutrition')
+                .order_by(AIConversation.created_at.desc())
+                .limit(20)
+                .all())
+    return jsonify({'success': True, 'data': {
+        'messages': [
+            {'role': m.role, 'content': m.content, 'created_at': m.created_at.isoformat()}
+            for m in reversed(messages)
+        ],
+    }})
+
+
+@bp.route('/nutrition/chat/message', methods=['POST'])
+@require_auth
+def nutrition_chat_message():
+    data = request.json or {}
+    content = (data.get('content') or '').strip()
+    if not content:
+        return jsonify({'success': False, 'error': {
+            'code': 'EMPTY', 'message': 'content required',
+        }}), 400
+
+    nutrition_context = build_nutrition_context(g.user_id)
+
+    def generate():
+        for chunk in stream_chat(g.user_id, 'nutrition', content,
+                                  extra_context=nutrition_context):
+            yield f"data: {chunk.replace(chr(10), ' ')}\n\n"
+        yield 'data: [DONE]\n\n'
+
+    return Response(stream_with_context(generate()), mimetype='text/event-stream')

@@ -1,6 +1,7 @@
 # tests/nutrition/test_routes.py
 from datetime import date, datetime, timedelta
 import pytest
+from unittest.mock import MagicMock, patch
 from app.core.models import User
 from app.core.auth import create_jwt
 from app.modules.nutrition.models import NutritionProfile, MealLog
@@ -146,3 +147,47 @@ def test_get_meal_log_returns_14_days(app, client, db):
     assert 'Сьогодні' in descs
     assert '10 днів тому' in descs
     assert '20 днів тому' not in descs
+
+
+# ── Chat route tests ───────────────────────────────────────────────────────────
+
+def test_get_chat_thread_empty(app, client, db):
+    user = _make_user(db)
+    r = client.get('/api/nutrition/chat/thread', headers=_h(app, user.id))
+    assert r.status_code == 200
+    data = r.get_json()
+    assert data['success'] is True
+    assert data['data']['messages'] == []
+
+
+def test_post_chat_message_streams(app, client, db):
+    from unittest.mock import MagicMock, patch
+    user = _make_user(db)
+    profile = NutritionProfile(
+        user_id=user.id, diet_type='omnivore', allergies=[],
+        cooking_skill='beginner', budget='medium', activity_outside='sedentary',
+        calorie_target=1400.0, protein_g=130.0, fat_g=43.6, carbs_g=175.0,
+    )
+    db.session.add(profile)
+    db.session.commit()
+
+    mock_client = MagicMock()
+    mock_stream = MagicMock()
+    mock_stream.__enter__ = MagicMock(return_value=mock_stream)
+    mock_stream.__exit__ = MagicMock(return_value=False)
+    mock_stream.text_stream = iter(['Спробуй ', 'вівсянку.'])
+    mock_client.messages.stream.return_value = mock_stream
+
+    with patch('app.core.ai.get_client', return_value=mock_client):
+        r = client.post('/api/nutrition/chat/message',
+                        json={'content': 'Що з яєць?'},
+                        headers=_h(app, user.id))
+
+    assert r.status_code == 200
+    assert 'Спробуй' in r.data.decode('utf-8')
+
+
+def test_post_chat_message_requires_content(app, client, db):
+    user = _make_user(db)
+    r = client.post('/api/nutrition/chat/message', json={}, headers=_h(app, user.id))
+    assert r.status_code == 400
