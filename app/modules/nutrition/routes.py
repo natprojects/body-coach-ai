@@ -40,7 +40,7 @@ def _profile_to_dict(profile: NutritionProfile, user: User) -> dict:
 @bp.route('/nutrition/profile', methods=['GET'])
 @require_auth
 def get_nutrition_profile():
-    user = User.query.get(g.user_id)
+    user = db.session.get(User, g.user_id)
     if not user.weight_kg or not user.height_cm:
         return jsonify({'success': False, 'error': {
             'code': 'INCOMPLETE_ONBOARDING',
@@ -55,7 +55,7 @@ def get_nutrition_profile():
 @bp.route('/nutrition/profile', methods=['POST'])
 @require_auth
 def set_nutrition_profile():
-    user = User.query.get(g.user_id)
+    user = db.session.get(User, g.user_id)
     if not user.weight_kg or not user.height_cm:
         return jsonify({'success': False, 'error': {
             'code': 'INCOMPLETE_ONBOARDING',
@@ -71,6 +71,11 @@ def set_nutrition_profile():
     profile.cooking_skill    = data.get('cooking_skill', profile.cooking_skill)
     profile.budget           = data.get('budget', profile.budget)
     profile.activity_outside = data.get('activity_outside', profile.activity_outside)
+    if not profile.activity_outside:
+        return jsonify({'success': False, 'error': {
+            'code': 'MISSING_FIELD',
+            'message': 'activity_outside is required',
+        }}), 400
     _compute_and_save(profile, user)
     db.session.commit()
     return jsonify({'success': True, 'data': _profile_to_dict(profile, user)})
