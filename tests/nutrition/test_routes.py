@@ -191,3 +191,12 @@ def test_post_chat_message_requires_content(app, client, db):
     user = _make_user(db)
     r = client.post('/api/nutrition/chat/message', json={}, headers=_h(app, user.id))
     assert r.status_code == 400
+
+
+def test_post_profile_rejects_invalid_activity(app, client, db):
+    user = _make_user(db)
+    body = {'diet_type': 'omnivore', 'allergies': [], 'cooking_skill': 'beginner',
+            'budget': 'medium', 'activity_outside': 'extreme'}
+    r = client.post('/api/nutrition/profile', json=body, headers=_h(app, user.id))
+    assert r.status_code == 400
+    assert r.get_json()['error']['code'] == 'INVALID_FIELD'

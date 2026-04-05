@@ -9,6 +9,8 @@ from .models import NutritionProfile, MealLog
 from .calculator import calc_bmr, calc_tdee, calc_calorie_target, calc_macros, calc_water_ml
 from .context import build_nutrition_context
 
+_VALID_ACTIVITY = {'sedentary', 'lightly', 'moderately', 'very'}
+
 
 def _compute_and_save(profile: NutritionProfile, user: User) -> None:
     """Recalculate BMR/TDEE/macros and persist to profile."""
@@ -65,19 +67,26 @@ def set_nutrition_profile():
         }}), 400
     data = request.json or {}
     profile = NutritionProfile.query.filter_by(user_id=g.user_id).first()
-    if not profile:
+    is_new = profile is None
+    if is_new:
         profile = NutritionProfile(user_id=g.user_id)
-        db.session.add(profile)
+
+    # Stage field updates (don't add to session yet)
     profile.diet_type        = data.get('diet_type', profile.diet_type)
     profile.allergies        = data.get('allergies', profile.allergies)
     profile.cooking_skill    = data.get('cooking_skill', profile.cooking_skill)
     profile.budget           = data.get('budget', profile.budget)
     profile.activity_outside = data.get('activity_outside', profile.activity_outside)
-    if not profile.activity_outside:
+
+    # Validate before mutating session
+    if profile.activity_outside not in _VALID_ACTIVITY:
         return jsonify({'success': False, 'error': {
-            'code': 'MISSING_FIELD',
-            'message': 'activity_outside is required',
+            'code': 'INVALID_FIELD',
+            'message': f'activity_outside must be one of: {", ".join(sorted(_VALID_ACTIVITY))}',
         }}), 400
+
+    if is_new:
+        db.session.add(profile)
     _compute_and_save(profile, user)
     db.session.commit()
     return jsonify({'success': True, 'data': _profile_to_dict(profile, user)})

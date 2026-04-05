@@ -1890,7 +1890,7 @@ async function sendNutrMessage() {
         if (!line.startsWith('data: ')) continue;
         const chunk = line.slice(6);
         if (chunk === '[DONE]') break;
-        fullText += chunk + ' ';
+        fullText += chunk;
         aiDiv.textContent = fullText;
         container.scrollTop = container.scrollHeight;
       }
