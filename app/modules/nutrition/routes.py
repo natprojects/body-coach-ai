@@ -79,3 +79,41 @@ def set_nutrition_profile():
     _compute_and_save(profile, user)
     db.session.commit()
     return jsonify({'success': True, 'data': _profile_to_dict(profile, user)})
+
+
+@bp.route('/nutrition/meals/log', methods=['POST'])
+@require_auth
+def log_meal():
+    data = request.json or {}
+    description = (data.get('description') or '').strip()
+    if not description:
+        return jsonify({'success': False, 'error': {
+            'code': 'EMPTY', 'message': 'description required',
+        }}), 400
+    entry = MealLog(user_id=g.user_id, date=date.today(), description=description)
+    db.session.add(entry)
+    db.session.commit()
+    return jsonify({'success': True, 'data': {
+        'id': entry.id,
+        'date': entry.date.isoformat(),
+        'description': entry.description,
+    }})
+
+
+@bp.route('/nutrition/meals/log', methods=['GET'])
+@require_auth
+def get_meal_log():
+    since = date.today() - timedelta(days=14)
+    entries = (MealLog.query
+               .filter(MealLog.user_id == g.user_id, MealLog.date >= since)
+               .order_by(MealLog.date.desc(), MealLog.logged_at.desc())
+               .all())
+    return jsonify({'success': True, 'data': [
+        {
+            'id': e.id,
+            'date': e.date.isoformat(),
+            'description': e.description,
+            'logged_at': e.logged_at.isoformat() if e.logged_at else None,
+        }
+        for e in entries
+    ]})

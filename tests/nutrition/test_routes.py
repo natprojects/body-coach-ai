@@ -109,3 +109,40 @@ def test_get_profile_returns_water_ml(app, client, db):
     data = r.get_json()['data']
     assert 'water_ml' in data
     assert data['water_ml'] == 2112   # 65 * 32.5 = 2112 (int)
+
+
+# ── Meal log route tests ───────────────────────────────────────────────────────
+
+def test_post_meal_log(app, client, db):
+    user = _make_user(db)
+    r = client.post('/api/nutrition/meals/log',
+                    json={'description': 'Гречка з куркою і овочами'},
+                    headers=_h(app, user.id))
+    assert r.status_code == 200
+    assert r.get_json()['success'] is True
+    log = MealLog.query.filter_by(user_id=user.id).first()
+    assert log is not None
+    assert log.description == 'Гречка з куркою і овочами'
+    assert log.date == date.today()
+
+
+def test_post_meal_log_requires_description(app, client, db):
+    user = _make_user(db)
+    r = client.post('/api/nutrition/meals/log', json={}, headers=_h(app, user.id))
+    assert r.status_code == 400
+
+
+def test_get_meal_log_returns_14_days(app, client, db):
+    user = _make_user(db)
+    today = date.today()
+    db.session.add(MealLog(user_id=user.id, date=today, description='Сьогодні'))
+    db.session.add(MealLog(user_id=user.id, date=today - timedelta(days=10), description='10 днів тому'))
+    db.session.add(MealLog(user_id=user.id, date=today - timedelta(days=20), description='20 днів тому'))
+    db.session.commit()
+    r = client.get('/api/nutrition/meals/log', headers=_h(app, user.id))
+    assert r.status_code == 200
+    entries = r.get_json()['data']
+    descs = [e['description'] for e in entries]
+    assert 'Сьогодні' in descs
+    assert '10 днів тому' in descs
+    assert '20 днів тому' not in descs
