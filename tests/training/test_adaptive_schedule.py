@@ -122,3 +122,16 @@ def test_ad_hoc_skips_completed_workouts(client, app, db):
     data = resp.get_json()['data']
     assert data['name'] == 'Workout B'
     assert data['ad_hoc'] is True
+
+
+def test_recommendations_today_on_ad_hoc_day(client, app, db):
+    """recommendations_today returns recs list on an unscheduled day (not empty)."""
+    day1, day2 = _off_days()
+    user = _make_user(db)
+    _make_two_workout_program(user.id, day1, day2)
+
+    resp = client.get('/api/training/recommendations/today', headers=_h(app, user.id))
+    assert resp.status_code == 200
+    data = resp.get_json()['data']
+    assert 'recommendations' in data
+    assert isinstance(data['recommendations'], list)

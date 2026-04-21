@@ -140,9 +140,9 @@ def _serialize_week(week):
     }
 
 
-def _get_active_workout(week, user_id):
+def _get_active_workout(week, user_id, today):
     """Return (workout, is_ad_hoc). is_ad_hoc=True when training on unscheduled day."""
-    today_dow = date.today().weekday()
+    today_dow = today.weekday()
 
     # 1. Scheduled workout today
     scheduled = Workout.query.filter_by(
@@ -183,7 +183,8 @@ def training_today():
     if not program:
         return jsonify({'success': True, 'data': None})
 
-    days_elapsed = (date.today() - program.created_at.date()).days
+    today = date.today()
+    days_elapsed = (today - program.created_at.date()).days
     current_week_num = (days_elapsed // 7) + 1
 
     week = (ProgramWeek.query
@@ -193,7 +194,7 @@ def training_today():
     if not week:
         return jsonify({'success': True, 'data': None})
 
-    workout, is_ad_hoc = _get_active_workout(week, g.user_id)
+    workout, is_ad_hoc = _get_active_workout(week, g.user_id, today)
     if not workout:
         return jsonify({'success': True, 'data': {'rest_day': True}})
 
@@ -595,7 +596,6 @@ def exercise_technique(exercise_id):
 @bp.route('/training/recommendations/today', methods=['GET'])
 @require_auth
 def recommendations_today():
-    from datetime import date
     from .models import ExerciseRecommendation, LoggedExercise
     from .progress import check_deload_needed
 
@@ -603,8 +603,8 @@ def recommendations_today():
     if not program:
         return jsonify({'success': True, 'data': {'recommendations': [], 'deload_needed': False}})
 
-    today_dow = date.today().weekday()
-    days_elapsed = (date.today() - program.created_at.date()).days
+    today = date.today()
+    days_elapsed = (today - program.created_at.date()).days
     current_week_num = min((days_elapsed // 7) + 1, program.total_weeks)
 
     week = (ProgramWeek.query
@@ -615,7 +615,7 @@ def recommendations_today():
     if not week:
         return jsonify({'success': True, 'data': {'recommendations': [], 'deload_needed': False}})
 
-    workout = Workout.query.filter_by(program_week_id=week.id, day_of_week=today_dow).first()
+    workout, _ = _get_active_workout(week, g.user_id, today)
     if not workout:
         return jsonify({'success': True, 'data': {'recommendations': [], 'deload_needed': False}})
 
