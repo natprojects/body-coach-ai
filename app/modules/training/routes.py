@@ -140,6 +140,40 @@ def _serialize_week(week):
     }
 
 
+def _get_active_workout(week, user_id):
+    """Return (workout, is_ad_hoc). is_ad_hoc=True when training on unscheduled day."""
+    today_dow = date.today().weekday()
+
+    # 1. Scheduled workout today
+    scheduled = Workout.query.filter_by(
+        program_week_id=week.id, day_of_week=today_dow
+    ).first()
+    if scheduled:
+        return scheduled, False
+
+    # 2. Next incomplete workout this week
+    week_workouts = (Workout.query
+                     .filter_by(program_week_id=week.id)
+                     .order_by(Workout.order_index)
+                     .all())
+    if not week_workouts:
+        return None, False
+
+    completed_ids = {
+        s.workout_id for s in
+        WorkoutSession.query.filter(
+            WorkoutSession.user_id == user_id,
+            WorkoutSession.workout_id.in_([w.id for w in week_workouts]),
+            WorkoutSession.status == 'completed',
+        ).all()
+    }
+    for w in week_workouts:
+        if w.id not in completed_ids:
+            return w, True
+
+    return None, False
+
+
 # ── Today's workout ───────────────────────────────────────────────────────────
 
 @bp.route('/training/today', methods=['GET'])
@@ -149,7 +183,6 @@ def training_today():
     if not program:
         return jsonify({'success': True, 'data': None})
 
-    today_dow = date.today().weekday()
     days_elapsed = (date.today() - program.created_at.date()).days
     current_week_num = (days_elapsed // 7) + 1
 
@@ -160,11 +193,14 @@ def training_today():
     if not week:
         return jsonify({'success': True, 'data': None})
 
-    workout = Workout.query.filter_by(program_week_id=week.id, day_of_week=today_dow).first()
+    workout, is_ad_hoc = _get_active_workout(week, g.user_id)
     if not workout:
         return jsonify({'success': True, 'data': {'rest_day': True}})
 
-    return jsonify({'success': True, 'data': _serialize_workout_with_sets(workout)})
+    data = _serialize_workout_with_sets(workout)
+    if is_ad_hoc:
+        data['ad_hoc'] = True
+    return jsonify({'success': True, 'data': data})
 
 
 def _serialize_workout_with_sets(workout: Workout) -> dict:
