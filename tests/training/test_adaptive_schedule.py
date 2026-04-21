@@ -134,4 +134,10 @@ def test_recommendations_today_on_ad_hoc_day(client, app, db):
     assert resp.status_code == 200
     data = resp.get_json()['data']
     assert 'recommendations' in data
-    assert isinstance(data['recommendations'], list)
+    recs = data['recommendations']
+    # Workout A has one exercise (Squat); with no prior sessions the endpoint
+    # falls back to planned targets, so the list must not be empty.
+    assert len(recs) == 1
+    assert recs[0]['exercise_name'] == 'Squat'
+    assert recs[0]['recommendation_type'] == 'planned'
+    assert recs[0]['recommended_weight_kg'] == 60.0
