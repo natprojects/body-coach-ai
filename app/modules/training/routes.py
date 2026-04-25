@@ -84,7 +84,8 @@ def program_generate():
 @bp.route('/training/program/current', methods=['GET'])
 @require_auth
 def program_current():
-    program = Program.query.filter_by(user_id=g.user_id, status='active').first()
+    user = db.session.get(User, g.user_id)
+    program = Program.query.filter_by(user_id=g.user_id, status='active', module=user.active_module).first()
     if not program:
         return jsonify({'success': True, 'data': None})
     return jsonify({'success': True, 'data': _serialize_program(program)})
@@ -93,7 +94,8 @@ def program_current():
 @bp.route('/training/program/week/<int:week_num>', methods=['GET'])
 @require_auth
 def program_week(week_num):
-    program = Program.query.filter_by(user_id=g.user_id, status='active').first()
+    user = db.session.get(User, g.user_id)
+    program = Program.query.filter_by(user_id=g.user_id, status='active', module=user.active_module).first()
     if not program:
         return jsonify({'success': False, 'error': {'code': 'NOT_FOUND', 'message': 'No active program'}}), 404
     from .models import ProgramWeek
@@ -140,7 +142,7 @@ def _serialize_week(week):
     }
 
 
-def _get_active_workout(week, user_id, today):
+def _get_active_workout(week, user_id, today, active_module):
     """Return (workout, is_ad_hoc). is_ad_hoc=True when training on unscheduled day."""
     today_dow = today.weekday()
 
@@ -163,6 +165,7 @@ def _get_active_workout(week, user_id, today):
         s.workout_id for s in
         WorkoutSession.query.filter(
             WorkoutSession.user_id == user_id,
+            WorkoutSession.module == active_module,
             WorkoutSession.workout_id.in_([w.id for w in week_workouts]),
             WorkoutSession.status == 'completed',
         ).all()
@@ -179,7 +182,8 @@ def _get_active_workout(week, user_id, today):
 @bp.route('/training/today', methods=['GET'])
 @require_auth
 def training_today():
-    program = Program.query.filter_by(user_id=g.user_id, status='active').first()
+    user = db.session.get(User, g.user_id)
+    program = Program.query.filter_by(user_id=g.user_id, status='active', module=user.active_module).first()
     if not program:
         return jsonify({'success': True, 'data': None})
 
@@ -194,7 +198,7 @@ def training_today():
     if not week:
         return jsonify({'success': True, 'data': None})
 
-    workout, is_ad_hoc = _get_active_workout(week, g.user_id, today)
+    workout, is_ad_hoc = _get_active_workout(week, g.user_id, today, user.active_module)
     if not workout:
         return jsonify({'success': True, 'data': {'rest_day': True}})
 
@@ -236,9 +240,11 @@ def session_start():
     data = request.json or {}
     _phase = data.get('cycle_phase')
     _VALID_PHASES = {'menstrual', 'follicular', 'ovulation', 'luteal'}
+    user = db.session.get(User, g.user_id)
     session = WorkoutSession(
         user_id=g.user_id,
         workout_id=data.get('workout_id'),
+        module=user.active_module,
         date=date.today(),
         status='in_progress',
         cycle_phase=_phase if _phase in _VALID_PHASES else None,
@@ -257,7 +263,8 @@ def session_log_set():
     exercise_id = data.get('exercise_id')
 
     # Verify session belongs to authenticated user
-    session = WorkoutSession.query.filter_by(id=session_id, user_id=g.user_id).first()
+    _user = db.session.get(User, g.user_id)
+    session = WorkoutSession.query.filter_by(id=session_id, user_id=g.user_id, module=_user.active_module).first()
     if not session:
         return jsonify({'success': False, 'error': {'code': 'NOT_FOUND', 'message': 'Session not found'}}), 404
 
@@ -285,8 +292,9 @@ def session_log_set():
 @bp.route('/training/session/active', methods=['GET'])
 @require_auth
 def session_active():
+    _user = db.session.get(User, g.user_id)
     session = (WorkoutSession.query
-               .filter_by(user_id=g.user_id, status='in_progress')
+               .filter_by(user_id=g.user_id, status='in_progress', module=_user.active_module)
                .order_by(WorkoutSession.id.desc())
                .first())
     if not session:
@@ -321,7 +329,8 @@ def session_active():
 @require_auth
 def session_complete():
     data = request.json or {}
-    session = WorkoutSession.query.filter_by(id=data.get('session_id'), user_id=g.user_id).first()
+    _user = db.session.get(User, g.user_id)
+    session = WorkoutSession.query.filter_by(id=data.get('session_id'), user_id=g.user_id, module=_user.active_module).first()
     if not session:
         return jsonify({'success': False, 'error': {'code': 'NOT_FOUND', 'message': 'Session not found'}}), 404
 
@@ -330,6 +339,7 @@ def session_complete():
     WorkoutSession.query.filter(
         WorkoutSession.user_id == g.user_id,
         WorkoutSession.status == 'in_progress',
+        WorkoutSession.module == _user.active_module,
         WorkoutSession.id != session.id,
     ).update({'status': 'abandoned'})
     db.session.commit()
@@ -360,7 +370,8 @@ def session_complete():
 @bp.route('/training/session/<int:session_id>', methods=['GET'])
 @require_auth
 def session_detail(session_id):
-    session = WorkoutSession.query.filter_by(id=session_id, user_id=g.user_id).first()
+    _user = db.session.get(User, g.user_id)
+    session = WorkoutSession.query.filter_by(id=session_id, user_id=g.user_id, module=_user.active_module).first()
     if not session:
         return jsonify({'success': False, 'error': {'code': 'NOT_FOUND', 'message': 'Session not found'}}), 404
     return jsonify({'success': True, 'data': {
@@ -386,10 +397,12 @@ def session_detail(session_id):
 @require_auth
 def progress_weekly():
     since = date.today() - timedelta(days=7)
+    _user = db.session.get(User, g.user_id)
     sessions = (WorkoutSession.query
                 .filter(WorkoutSession.user_id == g.user_id,
                         WorkoutSession.date >= since,
-                        WorkoutSession.status == 'completed')
+                        WorkoutSession.status == 'completed',
+                        WorkoutSession.module == _user.active_module)
                 .order_by(WorkoutSession.date)
                 .all())
     report = generate_weekly_report(g.user_id, sessions)
@@ -399,8 +412,9 @@ def progress_weekly():
 @bp.route('/training/progress/history', methods=['GET'])
 @require_auth
 def progress_history():
+    _user = db.session.get(User, g.user_id)
     sessions = (WorkoutSession.query
-                .filter_by(user_id=g.user_id)
+                .filter_by(user_id=g.user_id, module=_user.active_module)
                 .order_by(WorkoutSession.date.desc())
                 .limit(50)
                 .all())
@@ -494,7 +508,8 @@ def _serialize_program_full(program):
 @bp.route('/training/program/full', methods=['GET'])
 @require_auth
 def program_full():
-    program = Program.query.filter_by(user_id=g.user_id, status='active').first()
+    user = db.session.get(User, g.user_id)
+    program = Program.query.filter_by(user_id=g.user_id, status='active', module=user.active_module).first()
     if not program:
         return jsonify({'success': True, 'data': None})
     return jsonify({'success': True, 'data': _serialize_program_full(program)})
@@ -503,7 +518,8 @@ def program_full():
 @bp.route('/training/program/insights', methods=['POST'])
 @require_auth
 def program_insights():
-    program = Program.query.filter_by(user_id=g.user_id, status='active').first()
+    _user_for_insights = db.session.get(User, g.user_id)
+    program = Program.query.filter_by(user_id=g.user_id, status='active', module=_user_for_insights.active_module).first()
     if not program:
         return jsonify({'success': False, 'error': {
             'code': 'NOT_FOUND', 'message': 'No active program'
@@ -521,10 +537,9 @@ def program_insights():
     if total > 0 and filled == total:
         return jsonify({'success': True, 'data': {'count': total, 'already_done': True}})
 
-    user = db.session.get(User, g.user_id)
     from .coach import generate_exercise_insights
     try:
-        count = generate_exercise_insights(program, user)
+        count = generate_exercise_insights(program, _user_for_insights)
     except Exception:
         return jsonify({'success': False, 'error': {
             'code': 'AI_ERROR', 'message': 'Failed to generate insights, please try again.'
@@ -537,7 +552,8 @@ def program_insights():
 @require_auth
 def session_skip_exercise():
     data = request.json or {}
-    session = WorkoutSession.query.filter_by(id=data.get('session_id'), user_id=g.user_id).first()
+    _user = db.session.get(User, g.user_id)
+    session = WorkoutSession.query.filter_by(id=data.get('session_id'), user_id=g.user_id, module=_user.active_module).first()
     if not session:
         return jsonify({'success': False, 'error': {'code': 'NOT_FOUND', 'message': 'Session not found'}}), 404
     reason = data.get('reason', 'skipped')
@@ -574,7 +590,8 @@ def exercise_technique(exercise_id):
     ex = db.session.get(Exercise, exercise_id)
     if not ex:
         return jsonify({'success': False, 'error': {'code': 'NOT_FOUND', 'message': 'Exercise not found'}}), 404
-    program = Program.query.filter_by(user_id=g.user_id, status='active').first()
+    user = db.session.get(User, g.user_id)
+    program = Program.query.filter_by(user_id=g.user_id, status='active', module=user.active_module).first()
     coaching_notes = None
     if program:
         we = (WorkoutExercise.query
@@ -585,7 +602,6 @@ def exercise_technique(exercise_id):
             coaching_notes = we.notes
     if ex.technique_text:
         return jsonify({'success': True, 'data': {'technique': ex.technique_text}})
-    user = db.session.get(User, g.user_id)
     from .coach import get_exercise_technique
     technique = get_exercise_technique(ex, user, coaching_notes)
     ex.technique_text = technique
@@ -599,7 +615,8 @@ def recommendations_today():
     from .models import ExerciseRecommendation, LoggedExercise
     from .progress import check_deload_needed
 
-    program = Program.query.filter_by(user_id=g.user_id, status='active').first()
+    _user = db.session.get(User, g.user_id)
+    program = Program.query.filter_by(user_id=g.user_id, status='active', module=_user.active_module).first()
     if not program:
         return jsonify({'success': True, 'data': {'recommendations': [], 'deload_needed': False}})
 
@@ -615,7 +632,7 @@ def recommendations_today():
     if not week:
         return jsonify({'success': True, 'data': {'recommendations': [], 'deload_needed': False}})
 
-    workout, _ = _get_active_workout(week, g.user_id, today)
+    workout, _ = _get_active_workout(week, g.user_id, today, _user.active_module)
     if not workout:
         return jsonify({'success': True, 'data': {'recommendations': [], 'deload_needed': False}})
 
