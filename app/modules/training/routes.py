@@ -531,9 +531,12 @@ def get_week_overview():
             'workouts': [],
         }})
 
+    days_elapsed = (today - program.created_at.date()).days
+    current_week_num = (days_elapsed // 7) + 1
+
     week = (ProgramWeek.query
             .join(Mesocycle)
-            .filter(Mesocycle.program_id == program.id)
+            .filter(Mesocycle.program_id == program.id, ProgramWeek.week_number == current_week_num)
             .first())
     if not week:
         return jsonify({'success': True, 'data': {
