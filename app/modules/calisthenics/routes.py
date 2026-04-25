@@ -526,3 +526,37 @@ def post_level_up(program_id):
 
     db.session.commit()
     return jsonify({'success': True, 'data': {'swapped_count': len(workout_exercises)}})
+
+
+@bp.route('/calisthenics/program/<int:program_id>/regenerate', methods=['POST'])
+@require_auth
+def post_regenerate(program_id):
+    user = db.session.get(User, g.user_id)
+    program = Program.query.filter_by(
+        id=program_id, user_id=g.user_id, module='calisthenics'
+    ).first()
+    if not program:
+        return jsonify({'success': False, 'error': {
+            'code': 'PROGRAM_NOT_FOUND', 'message': 'Program not found',
+        }}), 404
+
+    profile = CalisthenicsProfile.query.filter_by(user_id=g.user_id).first()
+    last_assessment = (CalisthenicsAssessment.query
+                       .filter_by(user_id=g.user_id)
+                       .order_by(CalisthenicsAssessment.assessed_at.desc())
+                       .first())
+    if not profile or not last_assessment:
+        return jsonify({'success': False, 'error': {
+            'code': 'ASSESSMENT_REQUIRED',
+            'message': 'Take the assessment again before regenerating',
+        }}), 400
+
+    try:
+        program_dict = generate_calisthenics_program(user, profile, last_assessment)
+        new_program = save_calisthenics_program_from_dict(g.user_id, program_dict)
+    except ValueError as e:
+        return jsonify({'success': False, 'error': {
+            'code': 'AI_GENERATION_FAILED', 'message': str(e),
+        }}), 500
+
+    return jsonify({'success': True, 'data': _serialize_program(new_program)})

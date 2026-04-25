@@ -351,3 +351,45 @@ def test_log_set_requires_auth(app, client):
 def test_complete_requires_auth(app, client):
     r = client.post('/api/calisthenics/session/1/complete', json={})
     assert r.status_code == 401
+
+
+@patch('app.modules.calisthenics.routes.generate_calisthenics_program', return_value=SAMPLE)
+def test_regenerate_archives_old_creates_new(mock_gen, app, client, db):
+    user = _make_user(db, telegram_id=94001)
+    r1 = client.post('/api/calisthenics/program/generate', headers=_h(app, user.id))
+    p1_id = r1.get_json()['data']['id']
+
+    r2 = client.post(f'/api/calisthenics/program/{p1_id}/regenerate', headers=_h(app, user.id))
+    assert r2.status_code == 200
+    p2_id = r2.get_json()['data']['id']
+    assert p2_id != p1_id
+
+    p1 = db.session.get(Program, p1_id)
+    assert p1.status == 'completed'
+    p2 = db.session.get(Program, p2_id)
+    assert p2.status == 'active'
+
+
+def test_regenerate_404_for_other_user_program(app, client, db):
+    user1 = _make_user(db, telegram_id=94002)
+    user2 = _make_user(db, telegram_id=94003)
+    p = Program(user_id=user1.id, name='C', periodization_type='hypertrophy',
+                total_weeks=4, status='active', module='calisthenics')
+    db.session.add(p); db.session.commit()
+    r = client.post(f'/api/calisthenics/program/{p.id}/regenerate', headers=_h(app, user2.id))
+    assert r.status_code == 404
+
+
+def test_regenerate_requires_assessment(app, client, db):
+    user = _make_user(db, telegram_id=94004, with_assessment=False)
+    p = Program(user_id=user.id, name='C', periodization_type='hypertrophy',
+                total_weeks=4, status='active', module='calisthenics')
+    db.session.add(p); db.session.commit()
+    r = client.post(f'/api/calisthenics/program/{p.id}/regenerate', headers=_h(app, user.id))
+    assert r.status_code == 400
+    assert r.get_json()['error']['code'] == 'ASSESSMENT_REQUIRED'
+
+
+def test_regenerate_requires_auth(app, client):
+    r = client.post('/api/calisthenics/program/1/regenerate')
+    assert r.status_code == 401
