@@ -1183,8 +1183,12 @@ async function loadMain() {
     S.todayWorkout = S.pendingResume.workout;
   }
   applyTranslations();
-  renderTrainTab();
   showScreen('main');
+  if (S.activeModule === 'calisthenics') {
+    await loadCalisthenicsMode();
+  } else {
+    renderTrainTab();
+  }
   // Load cycle phase badge after main screen is shown
   const cr = await api('GET', '/api/training/cycle/phase');
   if (cr.success) {
@@ -1868,8 +1872,7 @@ async function switchModule(mode) {
   if (mode === 'calisthenics') {
     await loadCalisthenicsMode();
   } else {
-    if (typeof renderTrainContent === 'function') renderTrainContent();
-    else loadTrainTab();
+    renderTrainTab();
   }
   if (document.getElementById('panel-program').classList.contains('active')) {
     loadProgramTab();
@@ -1878,13 +1881,18 @@ async function switchModule(mode) {
 
 async function loadCalisthenicsMode() {
   const r = await api('GET', '/api/calisthenics/profile');
-  if (!r.data) {
+  if (!r.success) {
+    const el = document.getElementById('train-content');
+    el.innerHTML = `<div style="color:var(--muted);font-size:13px;text-align:center;padding:40px">Не вдалось завантажити профіль. Спробуй пізніше.</div>`;
+    return;
+  }
+  if (r.data === null) {
     renderCalisthenicsWizard();
     return;
   }
   S.calisthenicsProfile = r.data;
   const ar = await api('GET', '/api/calisthenics/assessment/history');
-  S.calisthenicsLastAssessment = (ar.data && ar.data.length > 0) ? ar.data[0] : null;
+  S.calisthenicsLastAssessment = (ar && ar.success && ar.data && ar.data.length > 0) ? ar.data[0] : null;
   renderCalisthenicsHome();
 }
 
@@ -2076,10 +2084,19 @@ async function caliSubmitAssessment() {
     notes: (document.getElementById('cali-notes') || {}).value || '',
   };
 
+  const submitBtn = document.querySelector('.cali-assessment .cali-next-btn');
+  if (submitBtn) {
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Збереження...';
+  }
   const r = await api('POST', '/api/calisthenics/assessment', body);
   if (r.success) {
     S.calisthenicsLastAssessment = r.data;
     renderCalisthenicsHome();
+  } else if (submitBtn) {
+    submitBtn.disabled = false;
+    submitBtn.textContent = 'Зберегти результати';
+    alert('Не вдалось зберегти. Спробуй ще раз.');
   }
 }
 
