@@ -348,6 +348,9 @@ def get_today():
     return jsonify({'success': True, 'data': _serialize_workout_with_exercises(workout, ad_hoc=ad_hoc)})
 
 
+from app.modules.training.models import LoggedExercise, LoggedSet
+
+
 @bp.route('/calisthenics/session/start', methods=['POST'])
 @require_auth
 def post_session_start():
@@ -387,3 +390,84 @@ def post_session_start():
     db.session.add(session)
     db.session.commit()
     return jsonify({'success': True, 'data': {'session_id': session.id}})
+
+
+@bp.route('/calisthenics/session/<int:session_id>/log-set', methods=['POST'])
+@require_auth
+def post_log_set(session_id):
+    session = WorkoutSession.query.filter_by(
+        id=session_id, user_id=g.user_id, module='calisthenics'
+    ).first()
+    if not session:
+        return jsonify({'success': False, 'error': {
+            'code': 'SESSION_NOT_FOUND', 'message': 'Session not found',
+        }}), 404
+
+    data = request.json or {}
+    we_id = data.get('workout_exercise_id')
+    set_number = data.get('set_number')
+    actual_reps = data.get('actual_reps')
+    actual_seconds = data.get('actual_seconds')
+
+    if not isinstance(we_id, int) or not isinstance(set_number, int):
+        return jsonify({'success': False, 'error': {
+            'code': 'INVALID_FIELD',
+            'message': 'workout_exercise_id and set_number required',
+        }}), 400
+    if actual_reps is None and actual_seconds is None:
+        return jsonify({'success': False, 'error': {
+            'code': 'INVALID_FIELD',
+            'message': 'Either actual_reps or actual_seconds required',
+        }}), 400
+
+    we = db.session.get(WorkoutExercise, we_id)
+    if not we:
+        return jsonify({'success': False, 'error': {
+            'code': 'WORKOUT_EXERCISE_NOT_FOUND', 'message': 'Not found',
+        }}), 404
+
+    # Upsert LoggedExercise for this session+exercise pair
+    le = LoggedExercise.query.filter_by(
+        session_id=session.id, exercise_id=we.exercise_id
+    ).first()
+    if not le:
+        le = LoggedExercise(
+            session_id=session.id,
+            exercise_id=we.exercise_id,
+            order_index=we.order_index,
+        )
+        db.session.add(le)
+        db.session.flush()
+
+    # Upsert LoggedSet
+    log = LoggedSet.query.filter_by(
+        logged_exercise_id=le.id, set_number=set_number
+    ).first()
+    is_new = log is None
+    if is_new:
+        log = LoggedSet(logged_exercise_id=le.id, set_number=set_number)
+    log.actual_reps = actual_reps
+    log.actual_seconds = actual_seconds
+    log.actual_weight_kg = None
+    if is_new:
+        db.session.add(log)
+    db.session.commit()
+    return jsonify({'success': True, 'data': {'log_id': log.id}})
+
+
+@bp.route('/calisthenics/session/<int:session_id>/complete', methods=['POST'])
+@require_auth
+def post_complete(session_id):
+    session = WorkoutSession.query.filter_by(
+        id=session_id, user_id=g.user_id, module='calisthenics'
+    ).first()
+    if not session:
+        return jsonify({'success': False, 'error': {
+            'code': 'SESSION_NOT_FOUND', 'message': 'Session not found',
+        }}), 404
+
+    session.status = 'completed'
+    db.session.commit()
+
+    # Level-up suggestions added in Task 8 — empty list for now
+    return jsonify({'success': True, 'data': {'level_up_suggestions': []}})

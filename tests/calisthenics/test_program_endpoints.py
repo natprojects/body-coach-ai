@@ -223,3 +223,131 @@ def test_session_start_404_for_other_user_workout(app, client, db):
 def test_session_start_requires_auth(app, client):
     r = client.post('/api/calisthenics/session/start', json={'workout_id': 1})
     assert r.status_code == 401
+
+
+from app.modules.training.models import (
+    WorkoutExercise, PlannedSet, LoggedExercise, LoggedSet,
+)
+
+
+def _make_program_with_full_workout(db, user, today_dow):
+    p, [wo] = _make_program(db, user, days_indices=(today_dow,))
+    ex = Exercise.query.filter_by(module='calisthenics', name='full pushup').first()
+    we = WorkoutExercise(workout_id=wo.id, exercise_id=ex.id, order_index=0,
+                         tempo='3-1-2-0', is_mandatory=True)
+    db.session.add(we); db.session.flush()
+    for n in (1, 2, 3):
+        ps = PlannedSet(workout_exercise_id=we.id, set_number=n,
+                        target_reps='8-12', target_rpe=8.0, rest_seconds=90,
+                        is_amrap=(n == 3))
+        db.session.add(ps)
+    db.session.commit()
+    return p, wo, we
+
+
+def _start_session(db, user, workout):
+    s = WorkoutSession(user_id=user.id, workout_id=workout.id,
+                       module='calisthenics', status='in_progress',
+                       date=date.today())
+    db.session.add(s); db.session.commit()
+    return s
+
+
+def test_log_set_records_reps(app, client, db):
+    user = _make_user(db, telegram_id=92001)
+    today_dow = date.today().weekday()
+    _, wo, we = _make_program_with_full_workout(db, user, today_dow)
+    s = _start_session(db, user, wo)
+    r = client.post(f'/api/calisthenics/session/{s.id}/log-set',
+                    json={'workout_exercise_id': we.id, 'set_number': 1,
+                          'actual_reps': 10, 'actual_seconds': None},
+                    headers=_h(app, user.id))
+    assert r.status_code == 200
+    logs = LoggedSet.query.all()
+    assert len(logs) == 1
+    assert logs[0].actual_reps == 10
+
+
+def test_log_set_records_seconds(app, client, db):
+    user = _make_user(db, telegram_id=92002)
+    today_dow = date.today().weekday()
+    _, wo, _we = _make_program_with_full_workout(db, user, today_dow)
+    plank_ex = Exercise.query.filter_by(module='calisthenics', name='forearm plank').first()
+    we_p = WorkoutExercise(workout_id=wo.id, exercise_id=plank_ex.id, order_index=1)
+    db.session.add(we_p); db.session.flush()
+    ps = PlannedSet(workout_exercise_id=we_p.id, set_number=1, target_seconds=30, is_amrap=False)
+    db.session.add(ps); db.session.commit()
+    s = _start_session(db, user, wo)
+    r = client.post(f'/api/calisthenics/session/{s.id}/log-set',
+                    json={'workout_exercise_id': we_p.id, 'set_number': 1,
+                          'actual_reps': None, 'actual_seconds': 35},
+                    headers=_h(app, user.id))
+    assert r.status_code == 200
+    log = LoggedSet.query.order_by(LoggedSet.id.desc()).first()
+    assert log.actual_seconds == 35
+
+
+def test_log_set_upsert(app, client, db):
+    """Same set logged twice — second value overwrites first."""
+    user = _make_user(db, telegram_id=92003)
+    today_dow = date.today().weekday()
+    _, wo, we = _make_program_with_full_workout(db, user, today_dow)
+    s = _start_session(db, user, wo)
+    client.post(f'/api/calisthenics/session/{s.id}/log-set',
+                json={'workout_exercise_id': we.id, 'set_number': 1, 'actual_reps': 8},
+                headers=_h(app, user.id))
+    client.post(f'/api/calisthenics/session/{s.id}/log-set',
+                json={'workout_exercise_id': we.id, 'set_number': 1, 'actual_reps': 12},
+                headers=_h(app, user.id))
+    logs = LoggedSet.query.all()
+    assert len(logs) == 1
+    assert logs[0].actual_reps == 12
+
+
+def test_log_set_404_other_user_session(app, client, db):
+    user1 = _make_user(db, telegram_id=92004)
+    user2 = _make_user(db, telegram_id=92005)
+    today_dow = date.today().weekday()
+    _, wo, we = _make_program_with_full_workout(db, user1, today_dow)
+    s = _start_session(db, user1, wo)
+    r = client.post(f'/api/calisthenics/session/{s.id}/log-set',
+                    json={'workout_exercise_id': we.id, 'set_number': 1, 'actual_reps': 10},
+                    headers=_h(app, user2.id))
+    assert r.status_code == 404
+
+
+def test_complete_marks_session(app, client, db):
+    user = _make_user(db, telegram_id=92006)
+    today_dow = date.today().weekday()
+    _, wo, _we = _make_program_with_full_workout(db, user, today_dow)
+    s = _start_session(db, user, wo)
+    r = client.post(f'/api/calisthenics/session/{s.id}/complete',
+                    json={}, headers=_h(app, user.id))
+    assert r.status_code == 200
+    db.session.refresh(s)
+    assert s.status == 'completed'
+    data = r.get_json()['data']
+    assert 'level_up_suggestions' in data
+    assert data['level_up_suggestions'] == []  # Task 8 will add real suggestions
+
+
+def test_complete_404_for_gym_session(app, client, db):
+    user = _make_user(db, telegram_id=92007)
+    today_dow = date.today().weekday()
+    _, wo, _we = _make_program_with_full_workout(db, user, today_dow)
+    s = WorkoutSession(user_id=user.id, workout_id=wo.id, module='gym',
+                       status='in_progress', date=date.today())
+    db.session.add(s); db.session.commit()
+    r = client.post(f'/api/calisthenics/session/{s.id}/complete',
+                    json={}, headers=_h(app, user.id))
+    assert r.status_code == 404
+
+
+def test_log_set_requires_auth(app, client):
+    r = client.post('/api/calisthenics/session/1/log-set', json={})
+    assert r.status_code == 401
+
+
+def test_complete_requires_auth(app, client):
+    r = client.post('/api/calisthenics/session/1/complete', json={})
+    assert r.status_code == 401
