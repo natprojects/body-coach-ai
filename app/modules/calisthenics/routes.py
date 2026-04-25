@@ -1,7 +1,5 @@
-from datetime import datetime
 from flask import g, jsonify, request
 from app.core.auth import require_auth
-from app.core.models import User
 from app.extensions import db
 from . import bp
 from .models import CalisthenicsProfile, CalisthenicsAssessment
@@ -9,7 +7,6 @@ from .models import CalisthenicsProfile, CalisthenicsAssessment
 _VALID_GOALS = {'muscle', 'strength', 'skill', 'weight_loss', 'endurance'}
 _VALID_EQUIPMENT = {'none', 'floor', 'bands', 'dumbbells', 'pullup_bar', 'dip_bars', 'rings', 'parallettes'}
 _VALID_MOTIVATION = {'look', 'feel', 'achieve', 'health'}
-_PULLUP_EQUIPMENT = {'pullup_bar', 'dip_bars', 'rings'}
 
 
 def _profile_to_dict(profile: CalisthenicsProfile) -> dict:
@@ -72,12 +69,12 @@ def set_calisthenics_profile():
             'code': 'INVALID_FIELD',
             'message': f"equipment items must be from: {', '.join(sorted(_VALID_EQUIPMENT))}",
         }}), 400
-    if not isinstance(days_per_week, int) or not (1 <= days_per_week <= 7):
+    if not isinstance(days_per_week, int) or isinstance(days_per_week, bool) or not (1 <= days_per_week <= 7):
         return jsonify({'success': False, 'error': {
             'code': 'INVALID_FIELD',
             'message': 'days_per_week must be an integer between 1 and 7',
         }}), 400
-    if not isinstance(session_duration_min, int) or not (15 <= session_duration_min <= 180):
+    if not isinstance(session_duration_min, int) or isinstance(session_duration_min, bool) or not (15 <= session_duration_min <= 180):
         return jsonify({'success': False, 'error': {
             'code': 'INVALID_FIELD',
             'message': 'session_duration_min must be between 15 and 180',

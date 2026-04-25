@@ -189,3 +189,30 @@ def test_post_profile_invalid_motivation(app, client, db):
     )
     assert r.status_code == 400
     assert r.get_json()['error']['code'] == 'INVALID_FIELD'
+
+
+def test_get_profile_returns_data(app, client, db):
+    from app.modules.calisthenics.models import CalisthenicsProfile
+    user = _make_user(db, telegram_id=60017)
+    profile = CalisthenicsProfile(
+        user_id=user.id, goals=['muscle'], equipment=['floor'],
+        days_per_week=3, session_duration_min=45, injuries=[], motivation='look',
+    )
+    db.session.add(profile)
+    db.session.commit()
+    r = client.get('/api/calisthenics/profile', headers=_h(app, user.id))
+    assert r.status_code == 200
+    data = r.get_json()['data']
+    assert data['goals'] == ['muscle']
+    assert data['equipment'] == ['floor']
+    assert data['motivation'] == 'look'
+
+
+def test_get_profile_requires_auth(app, client, db):
+    r = client.get('/api/calisthenics/profile')
+    assert r.status_code == 401
+
+
+def test_post_profile_requires_auth(app, client, db):
+    r = client.post('/api/calisthenics/profile', json={})
+    assert r.status_code == 401
