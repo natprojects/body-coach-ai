@@ -136,6 +136,18 @@ def test_get_user_me_requires_auth(client):
     assert resp.status_code == 401
 
 
+def test_get_users_me_includes_active_module(client, app, db):
+    from app.core.models import User
+    user = User(telegram_id=60020)
+    db.session.add(user)
+    db.session.commit()
+    user.active_module = 'calisthenics'
+    db.session.commit()
+    r = client.get('/api/users/me', headers=_auth_header(app, user.id))
+    assert r.status_code == 200
+    assert r.get_json()['data']['active_module'] == 'calisthenics'
+
+
 def test_app_language_in_profile(client, app, db):
     from app.core.models import User
     user = User(telegram_id=50001, name='LangTest')

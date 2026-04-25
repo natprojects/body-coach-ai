@@ -36,6 +36,7 @@ class User(db.Model):
     password_hash = db.Column(db.String(256), nullable=True)
     onboarding_completed_at = db.Column(db.DateTime)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    active_module = db.Column(db.String(20), default='gym', nullable=False, server_default='gym')
 
 
 class BodyMeasurement(db.Model):

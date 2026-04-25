@@ -203,6 +203,7 @@ _PROFILE_FIELDS = {
 def _serialize_user(user):
     d = {f: getattr(user, f, None) for f in _PROFILE_FIELDS}
     d['id'] = user.id
+    d['active_module'] = getattr(user, 'active_module', 'gym')
     if d.get('last_period_date'):
         d['last_period_date'] = d['last_period_date'].isoformat()
     return d
@@ -231,3 +232,22 @@ def patch_user_me():
         setattr(user, k, v)
     db.session.commit()
     return jsonify({'success': True, 'data': _serialize_user(user)})
+
+
+_VALID_MODULES = {'gym', 'calisthenics'}
+
+
+@bp.route('/user/active-module', methods=['PATCH'])
+@require_auth
+def patch_active_module():
+    data = request.json or {}
+    module = data.get('module')
+    if module not in _VALID_MODULES:
+        return jsonify({'success': False, 'error': {
+            'code': 'INVALID_MODULE',
+            'message': f"module must be one of: {', '.join(sorted(_VALID_MODULES))}",
+        }}), 400
+    user = db.session.get(User, g.user_id)
+    user.active_module = module
+    db.session.commit()
+    return jsonify({'success': True, 'data': {'active_module': user.active_module}})
