@@ -515,6 +515,70 @@ def program_full():
     return jsonify({'success': True, 'data': _serialize_program_full(program)})
 
 
+@bp.route('/training/week-overview', methods=['GET'])
+@require_auth
+def get_week_overview():
+    user = db.session.get(User, g.user_id)
+    today = date.today()
+    week_start = today - timedelta(days=today.weekday())  # Monday
+
+    program = Program.query.filter_by(
+        user_id=g.user_id, status='active', module=user.active_module
+    ).first()
+    if not program:
+        return jsonify({'success': True, 'data': {
+            'week_start': week_start.isoformat(),
+            'workouts': [],
+        }})
+
+    week = (ProgramWeek.query
+            .join(Mesocycle)
+            .filter(Mesocycle.program_id == program.id)
+            .first())
+    if not week:
+        return jsonify({'success': True, 'data': {
+            'week_start': week_start.isoformat(),
+            'workouts': [],
+        }})
+
+    workouts = (Workout.query
+                .filter_by(program_week_id=week.id)
+                .order_by(Workout.order_index)
+                .all())
+
+    completed_session_workout_ids = {
+        s.workout_id for s in WorkoutSession.query.filter(
+            WorkoutSession.user_id == g.user_id,
+            WorkoutSession.status == 'completed',
+            WorkoutSession.module == user.active_module,
+            WorkoutSession.date >= week_start,
+        ).all()
+    }
+    today_dow = today.weekday()
+
+    out = []
+    for w in workouts:
+        if w.id in completed_session_workout_ids:
+            status = 'done'
+        elif w.day_of_week == today_dow:
+            status = 'today'
+        elif w.day_of_week < today_dow:
+            status = 'missed'
+        else:
+            status = 'upcoming'
+        out.append({
+            'id': w.id,
+            'name': w.name,
+            'day_of_week': w.day_of_week,
+            'status': status,
+        })
+
+    return jsonify({'success': True, 'data': {
+        'week_start': week_start.isoformat(),
+        'workouts': out,
+    }})
+
+
 @bp.route('/training/program/insights', methods=['POST'])
 @require_auth
 def program_insights():

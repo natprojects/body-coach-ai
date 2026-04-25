@@ -59,3 +59,39 @@ def test_calisthenics_user_does_not_see_gym_program(app, client, db):
     r = client.get('/api/training/program/current', headers=_h(app, user.id))
     assert r.status_code == 200
     assert r.get_json()['data'] is None
+
+
+def test_week_overview_gym(app, client, db):
+    user = _make_user(db, telegram_id=70010, active_module='gym')
+    _make_program(db, user, module='gym')
+    r = client.get('/api/training/week-overview', headers=_h(app, user.id))
+    assert r.status_code == 200
+    data = r.get_json()['data']
+    assert 'week_start' in data
+    assert isinstance(data['workouts'], list)
+    assert len(data['workouts']) == 1
+    assert data['workouts'][0]['name'] == 'gym Day 1'
+    assert data['workouts'][0]['status'] in ('today', 'upcoming', 'done', 'missed')
+
+
+def test_week_overview_calisthenics(app, client, db):
+    user = _make_user(db, telegram_id=70011, active_module='calisthenics')
+    _make_program(db, user, module='calisthenics')
+    r = client.get('/api/training/week-overview', headers=_h(app, user.id))
+    assert r.status_code == 200
+    workouts = r.get_json()['data']['workouts']
+    assert len(workouts) == 1
+    assert workouts[0]['name'] == 'calisthenics Day 1'
+
+
+def test_week_overview_no_program(app, client, db):
+    user = _make_user(db, telegram_id=70012, active_module='gym')
+    r = client.get('/api/training/week-overview', headers=_h(app, user.id))
+    assert r.status_code == 200
+    data = r.get_json()['data']
+    assert data['workouts'] == []
+
+
+def test_week_overview_requires_auth(app, client, db):
+    r = client.get('/api/training/week-overview')
+    assert r.status_code == 401
