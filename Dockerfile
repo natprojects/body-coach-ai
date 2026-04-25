@@ -10,7 +10,8 @@ COPY . .
 RUN mkdir -p /app/data
 
 ENV DATABASE_URL=sqlite:////app/data/body_coach.db
+ENV FLASK_APP=run:app
 
 EXPOSE 8000
 
-CMD ["gunicorn", "run:app", "--bind", "0.0.0.0:8000", "--workers", "2", "--timeout", "600"]
+CMD ["sh", "-c", "flask db upgrade && gunicorn run:app --bind 0.0.0.0:8000 --workers 2 --timeout 600"]
