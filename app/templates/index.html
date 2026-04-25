@@ -2696,10 +2696,8 @@ async function openNutritionistThread() {
     threadId = r.data.thread_id;
   }
   await switchTab('coach');
-  if (typeof openThread === 'function') {
-    openThread(threadId);
-  } else if (typeof loadCoachThread === 'function') {
-    loadCoachThread(threadId);
+  if (typeof openCoachThread === 'function') {
+    openCoachThread(threadId);
   }
 }
 
