@@ -110,3 +110,116 @@ def test_get_active_returns_program(mock_gen, app, client, db):
     assert data is not None
     assert data['name'] == 'Calisthenics Foundations'
     assert len(data['mesocycles']) == 1
+
+
+from datetime import date, datetime, timedelta
+from app.modules.training.models import (
+    Program, ProgramWeek, Workout, Mesocycle, WorkoutSession, Exercise, WorkoutExercise, PlannedSet,
+)
+
+
+def _make_program(db, user, days_indices=(0,)):
+    p = Program(user_id=user.id, name='Cali', periodization_type='hypertrophy',
+                total_weeks=4, status='active', module='calisthenics')
+    db.session.add(p)
+    db.session.flush()
+    m = Mesocycle(program_id=p.id, name='Block 1', order_index=0, weeks_count=1)
+    db.session.add(m)
+    db.session.flush()
+    w = ProgramWeek(mesocycle_id=m.id, week_number=1)
+    db.session.add(w)
+    db.session.flush()
+    workouts = []
+    for i, dow in enumerate(days_indices):
+        wo = Workout(program_week_id=w.id, day_of_week=dow,
+                     name=f'Day {i}', order_index=i)
+        db.session.add(wo)
+        workouts.append(wo)
+    db.session.commit()
+    return p, workouts
+
+
+def test_today_scheduled(app, client, db):
+    user = _make_user(db, telegram_id=91001)
+    today_dow = date.today().weekday()
+    _make_program(db, user, days_indices=(today_dow,))
+    r = client.get('/api/calisthenics/today', headers=_h(app, user.id))
+    assert r.status_code == 200
+    data = r.get_json()['data']
+    assert data is not None
+    assert data['name'] == 'Day 0'
+    assert data.get('rest_day') is not True
+
+
+def test_today_rest_day_when_all_done(app, client, db):
+    user = _make_user(db, telegram_id=91002)
+    today_dow = date.today().weekday()
+    _, workouts = _make_program(db, user, days_indices=(today_dow,))
+    # Mark workout completed via a session
+    s = WorkoutSession(user_id=user.id, workout_id=workouts[0].id,
+                       module='calisthenics', status='completed', date=date.today())
+    db.session.add(s)
+    db.session.commit()
+    r = client.get('/api/calisthenics/today', headers=_h(app, user.id))
+    data = r.get_json()['data']
+    assert data['rest_day'] is True
+
+
+def test_today_no_program(app, client, db):
+    user = _make_user(db, telegram_id=91003)
+    r = client.get('/api/calisthenics/today', headers=_h(app, user.id))
+    assert r.status_code == 200
+    assert r.get_json()['data'] is None
+
+
+def test_today_requires_auth(app, client):
+    r = client.get('/api/calisthenics/today')
+    assert r.status_code == 401
+
+
+def test_session_start_creates_session(app, client, db):
+    user = _make_user(db, telegram_id=91004)
+    today_dow = date.today().weekday()
+    _, workouts = _make_program(db, user, days_indices=(today_dow,))
+    r = client.post('/api/calisthenics/session/start',
+                    json={'workout_id': workouts[0].id},
+                    headers=_h(app, user.id))
+    assert r.status_code == 200
+    sid = r.get_json()['data']['session_id']
+    s = db.session.get(WorkoutSession, sid)
+    assert s.module == 'calisthenics'
+    assert s.status == 'in_progress'
+
+
+def test_session_start_rejects_other_module_workout(app, client, db):
+    user = _make_user(db, telegram_id=91005)
+    # Create gym workout
+    gp = Program(user_id=user.id, name='Gym', periodization_type='hypertrophy',
+                 total_weeks=4, status='active', module='gym')
+    db.session.add(gp); db.session.flush()
+    gm = Mesocycle(program_id=gp.id, name='m', order_index=0, weeks_count=1)
+    db.session.add(gm); db.session.flush()
+    gw = ProgramWeek(mesocycle_id=gm.id, week_number=1)
+    db.session.add(gw); db.session.flush()
+    gym_wo = Workout(program_week_id=gw.id, day_of_week=0, name='Gym', order_index=0)
+    db.session.add(gym_wo); db.session.commit()
+
+    r = client.post('/api/calisthenics/session/start',
+                    json={'workout_id': gym_wo.id}, headers=_h(app, user.id))
+    assert r.status_code == 400
+    assert r.get_json()['error']['code'] == 'MODULE_MISMATCH'
+
+
+def test_session_start_404_for_other_user_workout(app, client, db):
+    user1 = _make_user(db, telegram_id=91006)
+    user2 = _make_user(db, telegram_id=91007)
+    _, workouts = _make_program(db, user1, days_indices=(0,))
+    r = client.post('/api/calisthenics/session/start',
+                    json={'workout_id': workouts[0].id},
+                    headers=_h(app, user2.id))
+    assert r.status_code == 404
+
+
+def test_session_start_requires_auth(app, client):
+    r = client.post('/api/calisthenics/session/start', json={'workout_id': 1})
+    assert r.status_code == 401

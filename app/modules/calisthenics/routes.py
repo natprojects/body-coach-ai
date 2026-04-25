@@ -264,3 +264,126 @@ def get_active_program():
     if not program:
         return jsonify({'success': True, 'data': None})
     return jsonify({'success': True, 'data': _serialize_program(program)})
+
+
+from datetime import date, timedelta
+
+
+def _serialize_workout_with_exercises(workout: Workout, ad_hoc: bool = False) -> dict:
+    return {
+        'id': workout.id,
+        'name': workout.name,
+        'day_of_week': workout.day_of_week,
+        'target_muscle_groups': workout.target_muscle_groups,
+        'estimated_duration_min': workout.estimated_duration_min,
+        'warmup_notes': workout.warmup_notes,
+        'ad_hoc': ad_hoc,
+        'exercises': [{
+            'id': we.id,
+            'exercise_id': we.exercise_id,
+            'exercise_name': db.session.get(Exercise, we.exercise_id).name,
+            'unit': db.session.get(Exercise, we.exercise_id).unit,
+            'order_index': we.order_index,
+            'tempo': we.tempo,
+            'notes': we.notes,
+            'sets': [{
+                'id': ps.id, 'set_number': ps.set_number,
+                'target_reps': ps.target_reps, 'target_seconds': ps.target_seconds,
+                'target_rpe': ps.target_rpe, 'rest_seconds': ps.rest_seconds,
+                'is_amrap': ps.is_amrap,
+            } for ps in PlannedSet.query.filter_by(
+                workout_exercise_id=we.id
+            ).order_by(PlannedSet.set_number).all()],
+        } for we in sorted(workout.workout_exercises, key=lambda x: x.order_index)],
+    }
+
+
+def _get_active_calisthenics_workout(program, user_id, today):
+    """Return (workout, ad_hoc, rest_day). rest_day=True when all week workouts are done."""
+    week = (ProgramWeek.query.join(Mesocycle).filter(Mesocycle.program_id == program.id).first())
+    if not week:
+        return None, False, False
+    today_dow = today.weekday()
+    week_start = today - timedelta(days=today_dow)
+
+    week_workouts = (Workout.query.filter_by(program_week_id=week.id)
+                     .order_by(Workout.order_index).all())
+    if not week_workouts:
+        return None, False, False
+
+    completed_ids = {
+        s.workout_id for s in WorkoutSession.query.filter(
+            WorkoutSession.user_id == user_id,
+            WorkoutSession.module == 'calisthenics',
+            WorkoutSession.status == 'completed',
+            WorkoutSession.date >= week_start,
+            WorkoutSession.workout_id.in_([w.id for w in week_workouts]),
+        ).all()
+    }
+
+    scheduled = Workout.query.filter_by(program_week_id=week.id, day_of_week=today_dow).first()
+    if scheduled and scheduled.id not in completed_ids:
+        return scheduled, False, False
+
+    for w in week_workouts:
+        if w.id not in completed_ids:
+            ad_hoc = not (scheduled and w.id == scheduled.id)
+            return w, ad_hoc, False
+    return None, False, True  # all done → rest
+
+
+@bp.route('/calisthenics/today', methods=['GET'])
+@require_auth
+def get_today():
+    program = Program.query.filter_by(
+        user_id=g.user_id, module='calisthenics', status='active'
+    ).first()
+    if not program:
+        return jsonify({'success': True, 'data': None})
+    workout, ad_hoc, rest_day = _get_active_calisthenics_workout(program, g.user_id, date.today())
+    if rest_day:
+        return jsonify({'success': True, 'data': {'rest_day': True}})
+    if not workout:
+        return jsonify({'success': True, 'data': None})
+    return jsonify({'success': True, 'data': _serialize_workout_with_exercises(workout, ad_hoc=ad_hoc)})
+
+
+@bp.route('/calisthenics/session/start', methods=['POST'])
+@require_auth
+def post_session_start():
+    data = request.json or {}
+    workout_id = data.get('workout_id')
+    if not isinstance(workout_id, int):
+        return jsonify({'success': False, 'error': {
+            'code': 'INVALID_FIELD', 'message': 'workout_id required',
+        }}), 400
+
+    workout = db.session.get(Workout, workout_id)
+    if not workout:
+        return jsonify({'success': False, 'error': {
+            'code': 'WORKOUT_NOT_FOUND', 'message': 'Workout not found',
+        }}), 404
+
+    # Find program for this workout
+    program = (Program.query
+               .join(Mesocycle).join(ProgramWeek)
+               .filter(ProgramWeek.id == workout.program_week_id)
+               .first())
+    if not program or program.user_id != g.user_id:
+        return jsonify({'success': False, 'error': {
+            'code': 'WORKOUT_NOT_FOUND', 'message': 'Workout not found',
+        }}), 404
+    if program.module != 'calisthenics':
+        return jsonify({'success': False, 'error': {
+            'code': 'MODULE_MISMATCH',
+            'message': 'This workout belongs to a different module',
+        }}), 400
+
+    session = WorkoutSession(
+        user_id=g.user_id, workout_id=workout_id,
+        module='calisthenics', status='in_progress',
+        date=date.today(),
+    )
+    db.session.add(session)
+    db.session.commit()
+    return jsonify({'success': True, 'data': {'session_id': session.id}})
