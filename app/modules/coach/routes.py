@@ -6,7 +6,12 @@ from app.core.ai import get_client
 from app.core.auth import require_auth
 from app.extensions import db
 from . import bp
-from .context import COACH_SYSTEM, build_coach_context
+from .context import (
+    COACH_SYSTEM,
+    NUTRITIONIST_SYSTEM_ADDENDUM,
+    build_coach_context,
+    build_cross_thread_history,
+)
 from .models import ChatMessage, ChatThread
 
 
@@ -18,7 +23,8 @@ def list_threads():
                .order_by(ChatThread.updated_at.desc())
                .all())
     return jsonify({'success': True, 'data': [
-        {'id': t.id, 'title': t.title, 'updated_at': t.updated_at.isoformat()}
+        {'id': t.id, 'title': t.title, 'system_role': t.system_role,
+         'updated_at': t.updated_at.isoformat()}
         for t in threads
     ]})
 
@@ -26,10 +32,21 @@ def list_threads():
 @bp.route('/coach/threads', methods=['POST'])
 @require_auth
 def create_thread():
-    thread = ChatThread(user_id=g.user_id)
+    data = request.json or {}
+    role = data.get('system_role')
+    if role and role not in ('nutritionist',):
+        return jsonify({'success': False, 'error': {
+            'code': 'INVALID_ROLE', 'message': f'Unknown system_role: {role}',
+        }}), 400
+    title = data.get('title') or ('🥗 Нутриціолог' if role == 'nutritionist' else 'Нова розмова')
+    thread = ChatThread(user_id=g.user_id, system_role=role, title=title)
     db.session.add(thread)
     db.session.commit()
-    return jsonify({'success': True, 'data': {'thread_id': thread.id}})
+    return jsonify({'success': True, 'data': {
+        'thread_id': thread.id,
+        'title': thread.title,
+        'system_role': thread.system_role,
+    }})
 
 
 @bp.route('/coach/threads/<int:thread_id>', methods=['GET'])
@@ -46,6 +63,7 @@ def get_thread(thread_id):
     return jsonify({'success': True, 'data': {
         'id': thread.id,
         'title': thread.title,
+        'system_role': thread.system_role,
         'messages': [
             {'role': m.role, 'content': m.content, 'created_at': m.created_at.isoformat()}
             for m in messages
@@ -116,7 +134,13 @@ def thread_chat(thread_id):
     messages = [{'role': m.role, 'content': m.content} for m in history_msgs]
     messages.append({'role': 'user', 'content': user_message})
 
-    system = COACH_SYSTEM + '\n\n' + build_coach_context(g.user_id)
+    system = COACH_SYSTEM
+    if thread.system_role == 'nutritionist':
+        system += NUTRITIONIST_SYSTEM_ADDENDUM
+    system += '\n\n' + build_coach_context(g.user_id)
+    cross_history = build_cross_thread_history(g.user_id, thread_id)
+    if cross_history:
+        system += '\n\n' + cross_history
 
     def generate():
         full_response = []
