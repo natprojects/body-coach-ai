@@ -2181,7 +2181,7 @@ async function caliSubmitAssessment() {
     if (S.calisthenicsProgram) {
       if (confirm('Зберегти результати. Створити новий блок програми?')) {
         const programId = S.calisthenicsProgram.id;
-        const regen = await api('POST', `/api/calisthenics/program/${programId}/regenerate`);
+        const regen = await api('POST', `/api/calisthenics/program/${programId}/regenerate`, null, 600000);
         if (regen.success) {
           S.calisthenicsProgram = regen.data;
           await caliReloadProgramData();
@@ -2303,7 +2303,7 @@ async function caliGenerateProgram() {
     </div>
     <style>@keyframes caliSpin{to{transform:rotate(360deg)}}</style>`;
 
-  const r = await api('POST', '/api/calisthenics/program/generate');
+  const r = await api('POST', '/api/calisthenics/program/generate', null, 600000);
   if (!r.success) {
     alert('Не вдалось створити програму: ' + (r.error?.message || 'спробуй ще раз'));
     renderCalisthenicsHome();
