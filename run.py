@@ -1,5 +1,8 @@
-from dotenv import load_dotenv
-load_dotenv()
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass  # python-dotenv only needed for local dev; prod sets env vars directly
 
 from app import create_app
 
