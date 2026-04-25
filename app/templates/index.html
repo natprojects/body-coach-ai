@@ -2202,19 +2202,20 @@ function renderCalisthenicsHome() {
   const program = S.calisthenicsProgram;
   const today = S.calisthenicsToday;
   const weekOverview = S.calisthenicsWeekOverview;
+  const dowNames = {0:'Пн',1:'Вт',2:'Ср',3:'Чт',4:'Пт',5:'Сб',6:'Нд'};
 
   const assessedDate = a ? new Date(a.assessed_at).toLocaleDateString('uk-UA',
     { day: 'numeric', month: 'long' }) : null;
 
-  const lastAssessSmall = a ? `
-    <div class="cali-assess-card" style="margin-top:16px">
-      <div class="cali-assess-card-title">Остання оцінка · ${assessedDate}</div>
-      <div class="cali-assess-grid">
-        ${a.pushups != null ? `<div class="cali-assess-stat"><div class="cali-assess-stat-val">${a.pushups}</div><div class="cali-assess-stat-label">Віджимань</div></div>` : ''}
-        ${a.plank != null ? `<div class="cali-assess-stat"><div class="cali-assess-stat-val">${a.plank}с</div><div class="cali-assess-stat-label">Планка</div></div>` : ''}
-        ${a.squats != null ? `<div class="cali-assess-stat"><div class="cali-assess-stat-val">${a.squats}</div><div class="cali-assess-stat-label">Присідань</div></div>` : ''}
+  const lastAssessBlock = a ? `
+    <div class="hero-card" style="margin-top:14px">
+      <div class="hero-label">Остання оцінка · ${assessedDate}</div>
+      <div class="hero-stats">
+        ${a.pushups != null ? `<div class="stat"><span class="stat-value">${a.pushups}</span><span class="stat-label">Віджимань</span></div>` : ''}
+        ${a.plank != null ? `<div class="stat"><span class="stat-value">${a.plank}с</span><span class="stat-label">Планка</span></div>` : ''}
+        ${a.squats != null ? `<div class="stat"><span class="stat-value">${a.squats}</span><span class="stat-label">Присідань</span></div>` : ''}
       </div>
-      <button class="cali-next-btn" style="margin-top:12px" onclick="renderCalisthenicsAssessment()">Пройти тест знову</button>
+      <button class="btn btn-ghost" onclick="renderCalisthenicsAssessment()">Пройти тест знову</button>
     </div>` : '';
 
   let endOfBlockBanner = '';
@@ -2223,73 +2224,88 @@ function renderCalisthenicsHome() {
     const done = S.calisthenicsCompletedCount || 0;
     if (done >= target) {
       endOfBlockBanner = `
-        <div class="cali-assess-card" style="background:rgba(245,158,11,.1);border-color:#f59e0b">
-          <div class="cali-assess-card-title">🏆 Блок завершено!</div>
-          <div style="font-size:13px;margin-bottom:10px">Пройди тест щоб виміряти прогрес → новий блок</div>
-          <button class="cali-next-btn" onclick="renderCalisthenicsAssessment()">Пройти тест</button>
+        <div class="no-program-card" style="background:rgba(245,158,11,.12);border-color:rgba(245,158,11,.4)">
+          <div class="np-title">🏆 Блок завершено!</div>
+          <div class="np-body">Пройди тест щоб виміряти прогрес → новий блок</div>
+          <button class="btn btn-primary" onclick="renderCalisthenicsAssessment()">Пройти тест</button>
         </div>`;
     }
   }
 
   // STATE A — no program yet
   if (!program) {
-    el.innerHTML = `
-      <div class="cali-home">
-        ${a ? lastAssessSmall : `
-          <div class="cali-assess-card">
-            <div class="cali-assess-card-title">Базова оцінка</div>
-            <div style="color:var(--muted);font-size:13px;margin-bottom:12px">Пройди стартовий тест щоб система склала програму під тебе</div>
-            <button class="cali-next-btn" onclick="renderCalisthenicsAssessment()">Почати тест</button>
-          </div>`}
-        ${a ? `
-          <div class="cali-assess-card">
-            <div class="cali-assess-card-title">Програма</div>
-            <div style="color:var(--muted);font-size:13px;margin-bottom:12px">Згенеруємо персональний план на основі твоєї оцінки</div>
-            <button class="cali-next-btn" onclick="caliGenerateProgram()">Створити програму</button>
-          </div>` : ''}
-      </div>`;
+    let content = '';
+    if (!a) {
+      content = `
+        <div class="no-program-card">
+          <div class="np-title">Базова оцінка</div>
+          <div class="np-body">Пройди стартовий тест щоб система склала програму під тебе</div>
+          <button class="btn btn-primary" onclick="renderCalisthenicsAssessment()">Почати тест</button>
+        </div>`;
+    } else {
+      content = `
+        <div class="no-program-card">
+          <div class="np-title">Програма</div>
+          <div class="np-body">Згенеруємо персональний план на основі твоєї оцінки</div>
+          <button class="btn btn-primary" onclick="caliGenerateProgram()">Створити програму</button>
+        </div>
+        ${lastAssessBlock}`;
+    }
+    el.innerHTML = content;
     return;
   }
 
   // STATE B — active program
-  const dowNames = {0:'Пн',1:'Вт',2:'Ср',3:'Чт',4:'Пт',5:'Сб',6:'Нд'};
-  const todayCard = !today ? '' : (today.rest_day ? `
-    <div class="cali-assess-card">
-      <div class="cali-assess-card-title">Сьогодні</div>
-      <div style="font-size:18px;margin-bottom:8px">Відпочинок 💤</div>
-      <div style="font-size:13px;color:var(--muted)">Якщо є настрій — обери тренування нижче</div>
-    </div>` : `
-    <div class="cali-assess-card">
-      <div class="cali-assess-card-title">Сьогодні${today.ad_hoc ? ' · Позапланове' : ''}</div>
-      <div style="font-size:20px;font-weight:700;margin-bottom:6px">${today.name}</div>
-      ${today.estimated_duration_min ? `<div style="font-size:13px;color:var(--muted);margin-bottom:8px">~${today.estimated_duration_min} хв · ${(today.exercises||[]).length} вправ</div>` : ''}
-      <button class="cali-next-btn" onclick="caliStartSession(${today.id})">Почати тренування</button>
-    </div>`);
+  let todayCard = '';
+  if (today && today.rest_day) {
+    todayCard = `
+      <div class="rest-card">
+        <div class="hero-label">Сьогодні</div>
+        <div class="rest-title">Відпочинок 💤</div>
+        <div style="font-size:13px;color:var(--muted);margin-top:8px">Якщо є настрій — обери тренування нижче</div>
+      </div>`;
+  } else if (today) {
+    const exCount = (today.exercises || []).length;
+    const setCount = (today.exercises || []).reduce((s, e) => s + (e.sets ? e.sets.length : 0), 0);
+    const estMin = today.estimated_duration_min || Math.round(setCount * 2.5 + exCount * 2);
+    const adHocBadge = today.ad_hoc
+      ? `<div style="font-size:12px;color:var(--muted);margin-top:2px">Позапланове тренування</div>`
+      : '';
+    todayCard = `
+      <div class="hero-card">
+        <div class="hero-label">Сьогодні</div>
+        <div class="hero-title">${today.name || 'WORKOUT'}</div>
+        ${adHocBadge}
+        <div class="hero-stats">
+          <div class="stat"><span class="stat-value">${exCount}</span><span class="stat-label">Вправ</span></div>
+          <div class="stat"><span class="stat-value">${setCount}</span><span class="stat-label">Підходів</span></div>
+          <div class="stat"><span class="stat-value">${estMin}</span><span class="stat-label">Хв</span></div>
+        </div>
+        <button class="btn btn-primary" onclick="caliStartSession(${today.id})">Почати тренування</button>
+      </div>`;
+  }
 
   const overviewCard = weekOverview && weekOverview.workouts && weekOverview.workouts.length ? `
-    <div class="cali-assess-card">
-      <div class="cali-assess-card-title">Інше тренування цього тижня</div>
-      ${weekOverview.workouts.map(w => `
-        <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border)">
-          <div>
-            <div style="font-size:14px">${w.name}</div>
-            <div style="font-size:11px;color:var(--muted)">${dowNames[w.day_of_week] || ''}</div>
-          </div>
-          ${(() => {
-            if (w.status === 'done') return '<span style="font-size:12px;color:var(--muted)">✓ зроблено</span>';
-            if (w.status === 'today') return `<button class="cali-next-btn" style="width:auto;padding:6px 12px;font-size:12px" onclick="caliStartSession(${w.id})">→</button>`;
-            return `<button class="cali-next-btn" style="width:auto;padding:6px 12px;font-size:12px;background:transparent;border:1px solid var(--border);color:var(--text)" onclick="caliStartSession(${w.id})">Почати</button>`;
-          })()}
-        </div>`).join('')}
+    <div class="hero-card" style="margin-top:14px">
+      <div class="hero-label">Інше тренування цього тижня</div>
+      ${weekOverview.workouts.map(w => {
+        const action = (() => {
+          if (w.status === 'done') return '<span style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em">✓ Зроблено</span>';
+          if (w.status === 'today') return `<button class="btn btn-primary" style="width:auto;padding:8px 16px;font-size:12px" onclick="caliStartSession(${w.id})">→</button>`;
+          return `<button class="btn btn-ghost" style="width:auto;padding:8px 16px;font-size:12px" onclick="caliStartSession(${w.id})">Почати</button>`;
+        })();
+        return `
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border)">
+            <div>
+              <div style="font-size:14px;font-weight:600">${w.name}</div>
+              <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-top:2px">${dowNames[w.day_of_week] || ''}</div>
+            </div>
+            ${action}
+          </div>`;
+      }).join('')}
     </div>` : '';
 
-  el.innerHTML = `
-    <div class="cali-home">
-      ${endOfBlockBanner}
-      ${todayCard}
-      ${overviewCard}
-      ${lastAssessSmall}
-    </div>`;
+  el.innerHTML = `${endOfBlockBanner}${todayCard}${overviewCard}${lastAssessBlock}`;
 }
 
 
