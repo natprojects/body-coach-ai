@@ -160,3 +160,107 @@ def get_assessment_history():
                    .order_by(CalisthenicsAssessment.assessed_at.desc())
                    .all())
     return jsonify({'success': True, 'data': [_assessment_to_dict(a) for a in assessments]})
+
+
+from app.core.models import User
+from app.modules.training.models import (
+    Program, Mesocycle, ProgramWeek, Workout, Exercise, WorkoutExercise, PlannedSet, WorkoutSession,
+)
+from .coach import generate_calisthenics_program, save_calisthenics_program_from_dict
+
+
+def _serialize_program(program: Program) -> dict:
+    """Serialize a Program with full hierarchy."""
+    return {
+        'id': program.id,
+        'name': program.name,
+        'periodization_type': program.periodization_type,
+        'total_weeks': program.total_weeks,
+        'status': program.status,
+        'module': program.module,
+        'created_at': program.created_at.isoformat() if program.created_at else None,
+        'mesocycles': [{
+            'id': m.id,
+            'name': m.name,
+            'order_index': m.order_index,
+            'weeks_count': m.weeks_count,
+            'weeks': [{
+                'id': w.id,
+                'week_number': w.week_number,
+                'notes': w.notes,
+                'workouts': [{
+                    'id': wo.id,
+                    'day_of_week': wo.day_of_week,
+                    'name': wo.name,
+                    'order_index': wo.order_index,
+                    'target_muscle_groups': wo.target_muscle_groups,
+                    'estimated_duration_min': wo.estimated_duration_min,
+                    'warmup_notes': wo.warmup_notes,
+                    'exercises': [{
+                        'id': we.id,
+                        'exercise_id': we.exercise_id,
+                        'exercise_name': db.session.get(Exercise, we.exercise_id).name,
+                        'order_index': we.order_index,
+                        'tempo': we.tempo,
+                        'is_mandatory': we.is_mandatory,
+                        'notes': we.notes,
+                        'sets': [{
+                            'id': ps.id,
+                            'set_number': ps.set_number,
+                            'target_reps': ps.target_reps,
+                            'target_seconds': ps.target_seconds,
+                            'target_rpe': ps.target_rpe,
+                            'rest_seconds': ps.rest_seconds,
+                            'is_amrap': ps.is_amrap,
+                        } for ps in PlannedSet.query.filter_by(
+                            workout_exercise_id=we.id
+                        ).order_by(PlannedSet.set_number).all()],
+                    } for we in sorted(wo.workout_exercises, key=lambda x: x.order_index)],
+                } for wo in sorted(w.workouts, key=lambda x: x.order_index)],
+            } for w in sorted(m.weeks, key=lambda x: x.week_number)],
+        } for m in sorted(program.mesocycles, key=lambda x: x.order_index)],
+    }
+
+
+@bp.route('/calisthenics/program/generate', methods=['POST'])
+@require_auth
+def post_generate_program():
+    user = db.session.get(User, g.user_id)
+    profile = CalisthenicsProfile.query.filter_by(user_id=g.user_id).first()
+    if not profile:
+        return jsonify({'success': False, 'error': {
+            'code': 'PROFILE_REQUIRED',
+            'message': 'Complete the calisthenics profile setup first',
+        }}), 400
+
+    last_assessment = (CalisthenicsAssessment.query
+                       .filter_by(user_id=g.user_id)
+                       .order_by(CalisthenicsAssessment.assessed_at.desc())
+                       .first())
+    if not last_assessment:
+        return jsonify({'success': False, 'error': {
+            'code': 'ASSESSMENT_REQUIRED',
+            'message': 'Take the assessment first',
+        }}), 400
+
+    try:
+        program_dict = generate_calisthenics_program(user, profile, last_assessment)
+        program = save_calisthenics_program_from_dict(g.user_id, program_dict)
+    except ValueError as e:
+        return jsonify({'success': False, 'error': {
+            'code': 'AI_GENERATION_FAILED',
+            'message': str(e),
+        }}), 500
+
+    return jsonify({'success': True, 'data': _serialize_program(program)})
+
+
+@bp.route('/calisthenics/program/active', methods=['GET'])
+@require_auth
+def get_active_program():
+    program = Program.query.filter_by(
+        user_id=g.user_id, module='calisthenics', status='active'
+    ).first()
+    if not program:
+        return jsonify({'success': True, 'data': None})
+    return jsonify({'success': True, 'data': _serialize_program(program)})
