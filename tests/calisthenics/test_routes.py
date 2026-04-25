@@ -70,3 +70,50 @@ def test_calisthenics_assessment_creation(app, db):
 def test_user_active_module_default(app, db):
     user = _make_user(db, telegram_id=60003)
     assert user.active_module == 'gym'
+
+
+# ── active-module endpoint ─────────────────────────────────────────────────────
+
+def test_patch_active_module_to_calisthenics(app, client, db):
+    user = _make_user(db, telegram_id=60004)
+    assert user.active_module == 'gym'
+    r = client.patch(
+        '/api/user/active-module',
+        json={'module': 'calisthenics'},
+        headers=_h(app, user.id),
+    )
+    assert r.status_code == 200
+    data = r.get_json()
+    assert data['success'] is True
+    assert data['data']['active_module'] == 'calisthenics'
+    db.session.refresh(user)
+    assert user.active_module == 'calisthenics'
+
+
+def test_patch_active_module_back_to_gym(app, client, db):
+    user = _make_user(db, telegram_id=60005)
+    user.active_module = 'calisthenics'
+    db.session.commit()
+    r = client.patch(
+        '/api/user/active-module',
+        json={'module': 'gym'},
+        headers=_h(app, user.id),
+    )
+    assert r.status_code == 200
+    assert r.get_json()['data']['active_module'] == 'gym'
+
+
+def test_patch_active_module_invalid_value(app, client, db):
+    user = _make_user(db, telegram_id=60006)
+    r = client.patch(
+        '/api/user/active-module',
+        json={'module': 'yoga'},
+        headers=_h(app, user.id),
+    )
+    assert r.status_code == 400
+    assert r.get_json()['error']['code'] == 'INVALID_MODULE'
+
+
+def test_patch_active_module_requires_auth(app, client, db):
+    r = client.patch('/api/user/active-module', json={'module': 'calisthenics'})
+    assert r.status_code == 401
