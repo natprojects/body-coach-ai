@@ -757,13 +757,15 @@
         </div>
       </div>
       <!-- Main view (after setup) -->
-      <div id="nutrition-main">
-        <div class="nutr-targets-card" id="nutr-targets-card"></div>
-        <div class="nutr-messages" id="nutr-messages"></div>
-        <div class="nutr-input-area">
-          <textarea id="nutr-input" placeholder="Що є в холодильнику?" rows="1"></textarea>
-          <button class="nutr-log-btn" id="nutr-log-btn" onclick="logLastNutrMeal()" title="Записати як прийом їжі">&#x2713;</button>
-          <button class="nutr-send-btn" id="nutr-send-btn" onclick="sendNutrMessage()">&#x2191;</button>
+      <div id="nutrition-main" style="padding:16px;overflow-y:auto">
+        <div class="hero-card" style="margin-bottom:16px">
+          <div class="hero-label">Цілі на день</div>
+          <div id="nutr-targets-card" style="display:flex;gap:18px;align-items:flex-end;margin-top:10px"></div>
+        </div>
+        <div class="no-program-card">
+          <div class="np-title">🥗 Запитати нутриціолога</div>
+          <div class="np-body">Спецтред у Coach з повним контекстом твого профілю, тренувань, циклу та цілей. Питай "що з'їсти після Push & Core", "як добити білок до 120г", "розклади день під калістеніку".</div>
+          <button class="btn btn-primary" onclick="openNutritionistThread()">Відкрити розмову</button>
         </div>
       </div>
     </div>
@@ -2668,16 +2670,39 @@ function renderNutritionSetup() {
 
 async function renderNutritionTab() {
   document.getElementById('nutrition-setup').style.display = 'none';
-  document.getElementById('nutrition-main').style.display = 'flex';
+  document.getElementById('nutrition-main').style.display = 'block';
   const p = S.nutritionProfile;
   const water = (p.water_ml / 1000).toFixed(2);
   document.getElementById('nutr-targets-card').innerHTML =
-    '<span class="nutr-target-item">\uD83D\uDD25 <span class="nutr-target-val">' + Math.round(p.calorie_target) + '</span> \u043a\u043a\u0430\u043b</span>' +
-    '<span class="nutr-target-item">\uD83E\uDD69 <span class="nutr-target-val">' + Math.round(p.protein_g) + '\u0433</span></span>' +
-    '<span class="nutr-target-item">\uD83D\uDCA7 <span class="nutr-target-val">' + water + '\u043b</span></span>';
-  const cr = await api('GET', '/api/nutrition/chat/thread');
-  if (cr.success) _renderNutrMessages(cr.data.messages);
+    '<div class="stat"><span class="stat-value">' + Math.round(p.calorie_target) + '</span><span class="stat-label">Ккал</span></div>' +
+    '<div class="stat"><span class="stat-value">' + Math.round(p.protein_g) + 'г</span><span class="stat-label">Білок</span></div>' +
+    '<div class="stat"><span class="stat-value">' + water + 'л</span><span class="stat-label">Вода</span></div>';
 }
+
+
+async function openNutritionistThread() {
+  const list = await api('GET', '/api/coach/threads');
+  let threadId = null;
+  if (list && list.success && Array.isArray(list.data)) {
+    const existing = list.data.find(t => t.system_role === 'nutritionist');
+    if (existing) threadId = existing.id;
+  }
+  if (!threadId) {
+    const r = await api('POST', '/api/coach/threads', { system_role: 'nutritionist' });
+    if (!r || !r.success) {
+      alert('Не вдалось відкрити чат: ' + (r?.error?.message || ''));
+      return;
+    }
+    threadId = r.data.thread_id;
+  }
+  await switchTab('coach');
+  if (typeof openThread === 'function') {
+    openThread(threadId);
+  } else if (typeof loadCoachThread === 'function') {
+    loadCoachThread(threadId);
+  }
+}
+
 
 function _renderNutrMessages(messages) {
   const container = document.getElementById('nutr-messages');
