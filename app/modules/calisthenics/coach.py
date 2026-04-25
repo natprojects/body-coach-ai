@@ -184,3 +184,84 @@ def save_calisthenics_program_from_dict(user_id: int, program_dict: dict) -> Pro
 
     db.session.commit()
     return program
+
+
+def generate_calisthenics_insights(program, user, profile, last_assessment) -> int:
+    """Generate selection_reason + expected_outcome for every WorkoutExercise in a calisthenics
+    program. Returns count of exercises updated."""
+    wes = (WorkoutExercise.query
+           .join(Workout)
+           .join(ProgramWeek)
+           .join(Mesocycle)
+           .filter(Mesocycle.program_id == program.id)
+           .order_by(Mesocycle.order_index, ProgramWeek.week_number,
+                     Workout.order_index, WorkoutExercise.order_index)
+           .all())
+
+    if not wes:
+        return 0
+
+    exercises_data = []
+    for we in wes:
+        ex = db.session.get(Exercise, we.exercise_id)
+        exercises_data.append({
+            'workout_exercise_id': we.id,
+            'exercise_name': ex.name,
+            'progression_chain': ex.progression_chain,
+            'progression_level': ex.progression_level,
+            'unit': ex.unit,
+            'workout_name': we.workout.name,
+            'day_of_week': we.workout.day_of_week,
+        })
+
+    lang = getattr(user, 'app_language', None) or 'uk'
+    lang_instruction = " Write all text fields in Ukrainian." if lang == 'uk' else ""
+
+    system_prompt = (
+        "You are an expert calisthenics coach. "
+        "Return a JSON array only — no prose, no markdown fences. "
+        "For each exercise explain why it was chosen for this specific user (consider their "
+        "assessment scores, goals, equipment, injuries, and where it sits in its progression chain), "
+        "and what outcome to expect after a few weeks of consistent training. "
+        "Keep each field 1-3 sentences, conversational tone. "
+        f"Return exactly one object per input exercise, in the same order.{lang_instruction}"
+    )
+
+    profile_summary = (
+        f"Goals: {profile.goals}, Equipment: {profile.equipment}, Injuries: {profile.injuries}, "
+        f"Days/week: {profile.days_per_week}, Session: {profile.session_duration_min} min, "
+        f"Motivation: {profile.motivation}"
+    )
+    assessment_summary = (
+        f"pullups: {last_assessment.pullups}, australian_pullups: {last_assessment.australian_pullups}, "
+        f"pushups: {last_assessment.pushups}, pike_pushups: {last_assessment.pike_pushups}, "
+        f"squats: {last_assessment.squats}, lunges: {last_assessment.lunges}, "
+        f"plank: {last_assessment.plank}s, hollow_body: {last_assessment.hollow_body}s, "
+        f"superman_hold: {last_assessment.superman_hold}s"
+    )
+
+    user_prompt = (
+        f"User profile (calisthenics):\n"
+        f"- Name: {user.name}, Gender: {user.gender}, Age: {user.age}, Level: {user.level}\n"
+        f"- {profile_summary}\n\n"
+        f"Last assessment: {assessment_summary}\n\n"
+        f"Program: {program.name} ({program.total_weeks} weeks, {program.periodization_type})\n\n"
+        f"Exercises:\n{json.dumps(exercises_data, ensure_ascii=False)}\n\n"
+        "Return JSON array with fields: workout_exercise_id, selection_reason, expected_outcome"
+    )
+
+    raw = complete(system_prompt, user_prompt, max_tokens=8192, model='claude-sonnet-4-6')
+    raw = re.sub(r'^```(?:json)?\s*', '', raw.strip())
+    raw = re.sub(r'\s*```$', '', raw).strip()
+
+    insights = json.loads(raw)
+
+    we_map = {we.id: we for we in wes}
+    for item in insights:
+        we = we_map.get(item.get('workout_exercise_id'))
+        if we:
+            we.selection_reason = item.get('selection_reason')
+            we.expected_outcome = item.get('expected_outcome')
+
+    db.session.commit()
+    return len(insights)

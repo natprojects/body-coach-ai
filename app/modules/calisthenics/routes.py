@@ -166,11 +166,20 @@ from app.core.models import User
 from app.modules.training.models import (
     Program, Mesocycle, ProgramWeek, Workout, Exercise, WorkoutExercise, PlannedSet, WorkoutSession,
 )
-from .coach import generate_calisthenics_program, save_calisthenics_program_from_dict
+from .coach import (
+    generate_calisthenics_program,
+    save_calisthenics_program_from_dict,
+    generate_calisthenics_insights,
+)
 
 
 def _serialize_program(program: Program) -> dict:
     """Serialize a Program with full hierarchy."""
+    total_wes = (WorkoutExercise.query.join(Workout).join(ProgramWeek).join(Mesocycle)
+                 .filter(Mesocycle.program_id == program.id).count())
+    filled_wes = (WorkoutExercise.query.join(Workout).join(ProgramWeek).join(Mesocycle)
+                  .filter(Mesocycle.program_id == program.id,
+                          WorkoutExercise.selection_reason.isnot(None)).count())
     return {
         'id': program.id,
         'name': program.name,
@@ -178,6 +187,7 @@ def _serialize_program(program: Program) -> dict:
         'total_weeks': program.total_weeks,
         'status': program.status,
         'module': program.module,
+        'insights_generated': total_wes > 0 and filled_wes == total_wes,
         'created_at': program.created_at.isoformat() if program.created_at else None,
         'mesocycles': [{
             'id': m.id,
@@ -204,6 +214,8 @@ def _serialize_program(program: Program) -> dict:
                         'tempo': we.tempo,
                         'is_mandatory': we.is_mandatory,
                         'notes': we.notes,
+                        'selection_reason': we.selection_reason,
+                        'expected_outcome': we.expected_outcome,
                         'sets': [{
                             'id': ps.id,
                             'set_number': ps.set_number,
@@ -560,3 +572,36 @@ def post_regenerate(program_id):
         }}), 500
 
     return jsonify({'success': True, 'data': _serialize_program(new_program)})
+
+
+@bp.route('/calisthenics/program/<int:program_id>/insights', methods=['POST'])
+@require_auth
+def post_program_insights(program_id):
+    user = db.session.get(User, g.user_id)
+    program = Program.query.filter_by(
+        id=program_id, user_id=g.user_id, module='calisthenics'
+    ).first()
+    if not program:
+        return jsonify({'success': False, 'error': {
+            'code': 'PROGRAM_NOT_FOUND', 'message': 'Program not found',
+        }}), 404
+
+    profile = CalisthenicsProfile.query.filter_by(user_id=g.user_id).first()
+    last_assessment = (CalisthenicsAssessment.query
+                       .filter_by(user_id=g.user_id)
+                       .order_by(CalisthenicsAssessment.assessed_at.desc())
+                       .first())
+    if not profile or not last_assessment:
+        return jsonify({'success': False, 'error': {
+            'code': 'PROFILE_OR_ASSESSMENT_MISSING',
+            'message': 'Profile and assessment required',
+        }}), 400
+
+    try:
+        count = generate_calisthenics_insights(program, user, profile, last_assessment)
+    except (ValueError, Exception) as e:
+        return jsonify({'success': False, 'error': {
+            'code': 'AI_GENERATION_FAILED', 'message': str(e),
+        }}), 500
+
+    return jsonify({'success': True, 'data': _serialize_program(program)})

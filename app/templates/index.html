@@ -1742,6 +1742,19 @@ async function loadProgramTab() {
         <div style="font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em">${p.total_weeks} тижнів · ${_esc(p.periodization_type)}</div>
       </div>`;
 
+    const insightsBtn = p.insights_generated
+      ? `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+          <div style="font-size:11px;color:var(--accent);text-transform:uppercase;letter-spacing:.08em">✓ Пояснення згенеровані</div>
+          <button class="btn btn-ghost" id="cali-insights-toggle-btn"
+            style="width:auto;padding:6px 14px;font-size:12px;flex-shrink:0"
+            onclick="toggleInsightsVisibility()">${_showInsights ? 'Сховати' : 'Показати'}</button>
+        </div>`
+      : `<div style="margin-bottom:14px">
+          <button class="btn btn-ghost" id="cali-insights-btn" onclick="caliGenerateInsights(${p.id})">
+            Чому саме ця програма?
+          </button>
+        </div>`;
+
     const mesosHtml = (p.mesocycles || []).map(m => `
       <div class="meso-block open">
         <div class="meso-header" onclick="toggleMeso(this)">
@@ -1771,10 +1784,22 @@ async function loadProgramTab() {
                         ? (first.target_seconds != null ? `${first.target_seconds}с` : (first.target_reps || '?'))
                         : '?';
                       const rpe = first && first.target_rpe ? ` RPE${first.target_rpe}` : '';
+                      const insightsHtml = (ex.selection_reason || ex.expected_outcome) ? `
+                        <div class="prog-insight">
+                          <button type="button" class="prog-insight-toggle"
+                            onclick="toggleInsight(this)"><span class="insight-arrow">▶</span> Чому ця вправа</button>
+                          <div class="prog-insight-body">${_esc(ex.selection_reason) || '—'}</div>
+                        </div>
+                        <div class="prog-insight">
+                          <button type="button" class="prog-insight-toggle"
+                            onclick="toggleInsight(this)"><span class="insight-arrow">▶</span> Очікуваний результат</button>
+                          <div class="prog-insight-body">${_esc(ex.expected_outcome) || '—'}</div>
+                        </div>` : '';
                       return `
                         <div class="prog-ex-row">
                           <div class="prog-ex-name">${_esc(ex.exercise_name)}</div>
                           <div class="prog-ex-sets">${setCount}×${target}${rpe}</div>
+                          ${insightsHtml}
                         </div>`;
                     }).join('')}
                   </div>`).join('')}
@@ -1783,7 +1808,7 @@ async function loadProgramTab() {
         </div>
       </div>`).join('');
 
-    el.innerHTML = headerHtml + mesosHtml;
+    el.innerHTML = headerHtml + insightsBtn + mesosHtml;
     return;
   }
   const el = document.getElementById('program-content');
@@ -1928,6 +1953,24 @@ async function generateInsights() {
   } else {
     btn.textContent = t('try_again');
     btn.disabled = false;
+  }
+}
+
+async function caliGenerateInsights(programId) {
+  const btn = document.getElementById('cali-insights-btn');
+  if (!btn) return;
+  btn.textContent = 'Генерую…';
+  btn.disabled = true;
+  haptic('medium');
+  const r = await api('POST', `/api/calisthenics/program/${programId}/insights`, null, 600000);
+  if (r.success) {
+    haptic('heavy');
+    S.calisthenicsProgram = r.data;
+    await loadProgramTab();
+  } else {
+    btn.textContent = 'Спробувати ще раз';
+    btn.disabled = false;
+    alert('Не вдалось: ' + (r.error?.message || ''));
   }
 }
 
