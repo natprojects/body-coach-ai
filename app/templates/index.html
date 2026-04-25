@@ -1172,6 +1172,10 @@ async function loadMain() {
   if (userR.success) {
     S.user = userR.data;
     if (userR.data.app_language) _lang = userR.data.app_language;
+    if (S.user && S.user.active_module) {
+      S.activeModule = S.user.active_module;
+      localStorage.setItem('bca_active_module', S.activeModule);
+    }
   }
   if (S.activeModule === 'calisthenics') {
     document.getElementById('module-btn-gym').classList.remove('active');
@@ -1282,6 +1286,7 @@ function renderTrainTab() {
 function renderCycleBadge() {
   const el = document.getElementById('cycle-phase-badge');
   if (!el) return;
+  if (S.activeModule === 'calisthenics') { el.style.display = 'none'; return; }
   if (!S.cyclePhase || !S.cyclePhase.phase) { el.style.display = 'none'; return; }
   const icons = { menstrual: '🩸', follicular: '💪', ovulation: '⚠️', luteal: '🌙' };
   const icon = icons[S.cyclePhase.phase] || '';
@@ -1868,6 +1873,10 @@ async function switchModule(mode) {
   localStorage.setItem('bca_active_module', mode);
   document.getElementById('module-btn-gym').classList.toggle('active', mode === 'gym');
   document.getElementById('module-btn-calisthenics').classList.toggle('active', mode === 'calisthenics');
+  const badgeEl = document.getElementById('cycle-phase-badge');
+  if (badgeEl && mode === 'calisthenics') {
+    badgeEl.style.display = 'none';
+  }
   await api('PATCH', '/api/user/active-module', { module: mode });
   if (mode === 'calisthenics') {
     await loadCalisthenicsMode();

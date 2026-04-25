@@ -203,6 +203,7 @@ _PROFILE_FIELDS = {
 def _serialize_user(user):
     d = {f: getattr(user, f, None) for f in _PROFILE_FIELDS}
     d['id'] = user.id
+    d['active_module'] = getattr(user, 'active_module', 'gym')
     if d.get('last_period_date'):
         d['last_period_date'] = d['last_period_date'].isoformat()
     return d
