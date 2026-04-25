@@ -1,5 +1,5 @@
 # tests/calisthenics/test_routes.py
-from datetime import datetime
+from datetime import datetime, timedelta
 import pytest
 from app.core.models import User
 from app.core.auth import create_jwt
@@ -216,3 +216,96 @@ def test_get_profile_requires_auth(app, client, db):
 def test_post_profile_requires_auth(app, client, db):
     r = client.post('/api/calisthenics/profile', json={})
     assert r.status_code == 401
+
+
+# ── Assessment endpoints ───────────────────────────────────────────────────────
+
+def _make_profile(db, user_id):
+    from app.modules.calisthenics.models import CalisthenicsProfile
+    p = CalisthenicsProfile(
+        user_id=user_id, goals=['muscle'], equipment=['floor', 'bands', 'dumbbells'],
+        days_per_week=4, session_duration_min=45, injuries=[], motivation='look',
+    )
+    db.session.add(p)
+    db.session.commit()
+    return p
+
+
+def test_post_assessment_saves_results(app, client, db):
+    user = _make_user(db, telegram_id=60012)
+    _make_profile(db, user.id)
+    body = {
+        'pullups': None,
+        'australian_pullups': 8,
+        'pushups': 15,
+        'pike_pushups': 10,
+        'squats': 25,
+        'superman_hold': 30,
+        'plank': 45,
+        'hollow_body': 20,
+        'lunges': 12,
+        'notes': 'First assessment',
+    }
+    r = client.post('/api/calisthenics/assessment', json=body, headers=_h(app, user.id))
+    assert r.status_code == 200
+    data = r.get_json()['data']
+    assert data['id'] is not None
+    assert data['pullups'] is None
+    assert data['pushups'] == 15
+    assert data['plank'] == 45
+    assert data['notes'] == 'First assessment'
+
+
+def test_post_assessment_requires_profile(app, client, db):
+    user = _make_user(db, telegram_id=60013)
+    r = client.post(
+        '/api/calisthenics/assessment',
+        json={'pushups': 10, 'squats': 20, 'plank': 30, 'hollow_body': 15,
+              'lunges': 10, 'australian_pullups': 5, 'pike_pushups': 8,
+              'superman_hold': 20},
+        headers=_h(app, user.id),
+    )
+    assert r.status_code == 400
+    assert r.get_json()['error']['code'] == 'PROFILE_REQUIRED'
+
+
+def test_post_assessment_invalid_field(app, client, db):
+    user = _make_user(db, telegram_id=60014)
+    _make_profile(db, user.id)
+    r = client.post(
+        '/api/calisthenics/assessment',
+        json={'pushups': -1, 'squats': 20, 'plank': 30, 'hollow_body': 15,
+              'lunges': 10, 'australian_pullups': 5, 'pike_pushups': 8,
+              'superman_hold': 20},
+        headers=_h(app, user.id),
+    )
+    assert r.status_code == 400
+    assert r.get_json()['error']['code'] == 'INVALID_FIELD'
+
+
+def test_get_assessment_history_returns_all(app, client, db):
+    from app.modules.calisthenics.models import CalisthenicsAssessment
+    user = _make_user(db, telegram_id=60015)
+    _make_profile(db, user.id)
+    now = datetime.utcnow()
+    for i in range(3):
+        db.session.add(CalisthenicsAssessment(
+            user_id=user.id, pushups=10 + i, squats=20, plank=30,
+            hollow_body=15, lunges=10, australian_pullups=5,
+            pike_pushups=8, superman_hold=20,
+            assessed_at=now - timedelta(seconds=2 - i),
+        ))
+    db.session.commit()
+    r = client.get('/api/calisthenics/assessment/history', headers=_h(app, user.id))
+    assert r.status_code == 200
+    data = r.get_json()['data']
+    assert len(data) == 3
+    # newest first
+    assert data[0]['pushups'] >= data[1]['pushups']
+
+
+def test_get_assessment_history_empty(app, client, db):
+    user = _make_user(db, telegram_id=60016)
+    r = client.get('/api/calisthenics/assessment/history', headers=_h(app, user.id))
+    assert r.status_code == 200
+    assert r.get_json()['data'] == []

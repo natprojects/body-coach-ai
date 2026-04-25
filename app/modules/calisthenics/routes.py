@@ -99,3 +99,66 @@ def set_calisthenics_profile():
         db.session.add(profile)
     db.session.commit()
     return jsonify({'success': True, 'data': _profile_to_dict(profile)})
+
+
+_ALWAYS_REQUIRED_FIELDS = [
+    'australian_pullups', 'pushups', 'pike_pushups', 'squats',
+    'superman_hold', 'plank', 'hollow_body', 'lunges',
+]
+
+
+@bp.route('/calisthenics/assessment', methods=['POST'])
+@require_auth
+def post_assessment():
+    profile = CalisthenicsProfile.query.filter_by(user_id=g.user_id).first()
+    if not profile:
+        return jsonify({'success': False, 'error': {
+            'code': 'PROFILE_REQUIRED',
+            'message': 'Complete the calisthenics profile setup first',
+        }}), 400
+
+    data = request.json or {}
+
+    # Validate always-required fields: must be int >= 0 (not bool)
+    for field in _ALWAYS_REQUIRED_FIELDS:
+        val = data.get(field)
+        if not isinstance(val, int) or isinstance(val, bool) or val < 0:
+            return jsonify({'success': False, 'error': {
+                'code': 'INVALID_FIELD',
+                'message': f"{field} must be an integer >= 0",
+            }}), 400
+
+    # pullups: None allowed (no equipment), or int >= 0
+    pullups = data.get('pullups')
+    if pullups is not None and (not isinstance(pullups, int) or isinstance(pullups, bool) or pullups < 0):
+        return jsonify({'success': False, 'error': {
+            'code': 'INVALID_FIELD',
+            'message': 'pullups must be an integer >= 0 or null',
+        }}), 400
+
+    assessment = CalisthenicsAssessment(
+        user_id=g.user_id,
+        pullups=pullups,
+        australian_pullups=data['australian_pullups'],
+        pushups=data['pushups'],
+        pike_pushups=data['pike_pushups'],
+        squats=data['squats'],
+        superman_hold=data['superman_hold'],
+        plank=data['plank'],
+        hollow_body=data['hollow_body'],
+        lunges=data['lunges'],
+        notes=data.get('notes'),
+    )
+    db.session.add(assessment)
+    db.session.commit()
+    return jsonify({'success': True, 'data': _assessment_to_dict(assessment)})
+
+
+@bp.route('/calisthenics/assessment/history', methods=['GET'])
+@require_auth
+def get_assessment_history():
+    assessments = (CalisthenicsAssessment.query
+                   .filter_by(user_id=g.user_id)
+                   .order_by(CalisthenicsAssessment.assessed_at.desc())
+                   .all())
+    return jsonify({'success': True, 'data': [_assessment_to_dict(a) for a in assessments]})
