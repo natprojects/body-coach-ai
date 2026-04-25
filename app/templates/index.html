@@ -1727,32 +1727,63 @@ async function loadProgramTab() {
     const el = document.getElementById('program-content');
     const p = S.calisthenicsProgram;
     if (!p) {
-      el.innerHTML = `<div style="color:var(--muted);font-size:13px;text-align:center;padding:40px">Програми ще нема. Створи її через таб Train.</div>`;
+      el.innerHTML = `
+        <div class="no-program-card">
+          <div class="np-title">Програми ще нема</div>
+          <div class="np-body">Створи її через таб Train</div>
+        </div>`;
       return;
     }
-    const dowNames = {0:'Пн',1:'Вт',2:'Ср',3:'Чт',4:'Пт',5:'Сб',6:'Нд'};
-    el.innerHTML = `
-      <div style="padding:16px">
-        <div style="font-family:'Barlow Condensed',sans-serif;font-size:24px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;margin-bottom:4px">${p.name}</div>
-        <div style="font-size:13px;color:var(--muted);margin-bottom:20px">${p.total_weeks} тижнів · ${p.periodization_type}</div>
-        ${(p.mesocycles || []).map(m => `
-          <div style="margin-bottom:18px">
-            <div style="font-weight:700;margin-bottom:8px">${m.name}</div>
-            ${(m.weeks || []).map(w => `
-              <div style="margin-bottom:14px">
-                <div style="font-size:12px;color:var(--muted);margin-bottom:6px">Тиждень ${w.week_number}</div>
-                ${(w.workouts || []).map(wo => `
-                  <div class="cali-assess-card" style="margin-bottom:8px;padding:12px">
-                    <div style="font-weight:700;margin-bottom:4px">${dowNames[wo.day_of_week] || ''} · ${wo.name}</div>
-                    <div style="font-size:11px;color:var(--muted);margin-bottom:6px">${wo.target_muscle_groups || ''}${wo.estimated_duration_min ? ` · ~${wo.estimated_duration_min} хв` : ''}</div>
-                    ${(wo.exercises || []).map(ex => `
-                      <div style="font-size:13px;padding:4px 0;border-top:1px solid var(--border)">
-                        ${ex.exercise_name} · ${(ex.sets || []).length} × ${(ex.sets && ex.sets[0]) ? ((ex.sets[0].target_seconds != null) ? ex.sets[0].target_seconds + 'с' : ex.sets[0].target_reps) : '?'}
-                      </div>`).join('')}
-                  </div>`).join('')}
-              </div>`).join('')}
-          </div>`).join('')}
+    const dowNames = ['Пн','Вт','Ср','Чт','Пт','Сб','Нд'];
+    const headerHtml = `
+      <div class="hero-card" style="margin-bottom:14px">
+        <div class="hero-label">Програма</div>
+        <div class="hero-title">${_esc(p.name)}</div>
+        <div style="font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em">${p.total_weeks} тижнів · ${_esc(p.periodization_type)}</div>
       </div>`;
+
+    const mesosHtml = (p.mesocycles || []).map(m => `
+      <div class="meso-block open">
+        <div class="meso-header" onclick="toggleMeso(this)">
+          <span class="meso-name">${_esc(m.name)}</span>
+          <span class="meso-chevron">▲</span>
+        </div>
+        <div class="meso-body">
+          ${(m.weeks || []).map(w => `
+            <div class="week-block open">
+              <div class="week-header" onclick="toggleWeek(this)">
+                <span class="week-label">Тиждень ${w.week_number}</span>
+                <span></span>
+              </div>
+              <div class="week-body">
+                ${(w.workouts || []).map(wo => `
+                  <div class="day-block">
+                    <div class="day-header">
+                      <span>${dowNames[wo.day_of_week] || ''} — ${_esc(wo.name)}</span>
+                      ${wo.estimated_duration_min ? `<span class="day-duration">~${wo.estimated_duration_min} хв</span>` : ''}
+                    </div>
+                    ${wo.target_muscle_groups ? `<div class="day-muscles">${_esc(wo.target_muscle_groups)}</div>` : ''}
+                    ${wo.warmup_notes ? `<div class="day-warmup"><span class="warmup-label">Розминка:</span> ${_esc(wo.warmup_notes)}</div>` : ''}
+                    ${(wo.exercises || []).map(ex => {
+                      const setCount = (ex.sets || []).length;
+                      const first = (ex.sets && ex.sets[0]) || null;
+                      const target = first
+                        ? (first.target_seconds != null ? `${first.target_seconds}с` : (first.target_reps || '?'))
+                        : '?';
+                      const rpe = first && first.target_rpe ? ` RPE${first.target_rpe}` : '';
+                      return `
+                        <div class="prog-ex-row">
+                          <div class="prog-ex-name">${_esc(ex.exercise_name)}</div>
+                          <div class="prog-ex-sets">${setCount}×${target}${rpe}</div>
+                        </div>`;
+                    }).join('')}
+                  </div>`).join('')}
+              </div>
+            </div>`).join('')}
+        </div>
+      </div>`).join('');
+
+    el.innerHTML = headerHtml + mesosHtml;
     return;
   }
   const el = document.getElementById('program-content');
