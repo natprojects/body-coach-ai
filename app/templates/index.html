@@ -1725,7 +1725,34 @@ function toggleInsightsVisibility() {
 async function loadProgramTab() {
   if (S.activeModule === 'calisthenics') {
     const el = document.getElementById('program-content');
-    el.innerHTML = `<div style="color:var(--muted);font-size:13px;text-align:center;padding:40px">Програма калістеніки — незабаром</div>`;
+    const p = S.calisthenicsProgram;
+    if (!p) {
+      el.innerHTML = `<div style="color:var(--muted);font-size:13px;text-align:center;padding:40px">Програми ще нема. Створи її через таб Train.</div>`;
+      return;
+    }
+    const dowNames = {0:'Пн',1:'Вт',2:'Ср',3:'Чт',4:'Пт',5:'Сб',6:'Нд'};
+    el.innerHTML = `
+      <div style="padding:16px">
+        <div style="font-family:'Barlow Condensed',sans-serif;font-size:24px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;margin-bottom:4px">${p.name}</div>
+        <div style="font-size:13px;color:var(--muted);margin-bottom:20px">${p.total_weeks} тижнів · ${p.periodization_type}</div>
+        ${(p.mesocycles || []).map(m => `
+          <div style="margin-bottom:18px">
+            <div style="font-weight:700;margin-bottom:8px">${m.name}</div>
+            ${(m.weeks || []).map(w => `
+              <div style="margin-bottom:14px">
+                <div style="font-size:12px;color:var(--muted);margin-bottom:6px">Тиждень ${w.week_number}</div>
+                ${(w.workouts || []).map(wo => `
+                  <div class="cali-assess-card" style="margin-bottom:8px;padding:12px">
+                    <div style="font-weight:700;margin-bottom:4px">${dowNames[wo.day_of_week] || ''} · ${wo.name}</div>
+                    <div style="font-size:11px;color:var(--muted);margin-bottom:6px">${wo.target_muscle_groups || ''}${wo.estimated_duration_min ? ` · ~${wo.estimated_duration_min} хв` : ''}</div>
+                    ${(wo.exercises || []).map(ex => `
+                      <div style="font-size:13px;padding:4px 0;border-top:1px solid var(--border)">
+                        ${ex.exercise_name} · ${(ex.sets || []).length} × ${(ex.sets && ex.sets[0]) ? ((ex.sets[0].target_seconds != null) ? ex.sets[0].target_seconds + 'с' : ex.sets[0].target_reps) : '?'}
+                      </div>`).join('')}
+                  </div>`).join('')}
+              </div>`).join('')}
+          </div>`).join('')}
+      </div>`;
     return;
   }
   const el = document.getElementById('program-content');
@@ -2151,6 +2178,16 @@ async function caliSubmitAssessment() {
   const r = await api('POST', '/api/calisthenics/assessment', body);
   if (r.success) {
     S.calisthenicsLastAssessment = r.data;
+    if (S.calisthenicsProgram) {
+      if (confirm('Зберегти результати. Створити новий блок програми?')) {
+        const programId = S.calisthenicsProgram.id;
+        const regen = await api('POST', `/api/calisthenics/program/${programId}/regenerate`);
+        if (regen.success) {
+          S.calisthenicsProgram = regen.data;
+          await caliReloadProgramData();
+        }
+      }
+    }
     renderCalisthenicsHome();
   } else if (submitBtn) {
     submitBtn.disabled = false;
@@ -2179,6 +2216,20 @@ function renderCalisthenicsHome() {
       </div>
       <button class="cali-next-btn" style="margin-top:12px" onclick="renderCalisthenicsAssessment()">Пройти тест знову</button>
     </div>` : '';
+
+  let endOfBlockBanner = '';
+  if (program && weekOverview && weekOverview.workouts && weekOverview.workouts.length > 0) {
+    const target = (program.total_weeks || 4) * weekOverview.workouts.length;
+    const done = S.calisthenicsCompletedCount || 0;
+    if (done >= target) {
+      endOfBlockBanner = `
+        <div class="cali-assess-card" style="background:rgba(245,158,11,.1);border-color:#f59e0b">
+          <div class="cali-assess-card-title">🏆 Блок завершено!</div>
+          <div style="font-size:13px;margin-bottom:10px">Пройди тест щоб виміряти прогрес → новий блок</div>
+          <button class="cali-next-btn" onclick="renderCalisthenicsAssessment()">Пройти тест</button>
+        </div>`;
+    }
+  }
 
   // STATE A — no program yet
   if (!program) {
@@ -2234,6 +2285,7 @@ function renderCalisthenicsHome() {
 
   el.innerHTML = `
     <div class="cali-home">
+      ${endOfBlockBanner}
       ${todayCard}
       ${overviewCard}
       ${lastAssessSmall}
@@ -2437,9 +2489,41 @@ async function caliCompleteSession() {
 }
 
 
-// Stub for showLevelUpDialog — implemented in Task 12
 function showLevelUpDialog(s) {
+  const overlay = document.createElement('div');
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:1000;display:flex;align-items:center;justify-content:center;padding:20px';
+  overlay.innerHTML = `
+    <div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:22px;max-width:340px;width:100%">
+      <div style="font-size:32px;margin-bottom:8px">🎉</div>
+      <div style="font-family:'Barlow Condensed',sans-serif;font-size:20px;font-weight:800;text-transform:uppercase;margin-bottom:8px">Готова до наступного рівня!</div>
+      <div style="font-size:14px;color:var(--muted);margin-bottom:14px">Ти 3 рази поспіль зробила <b>${s.exercise_name_current}</b> з запасом. Час спробувати <b>${s.exercise_name_next}</b>.</div>
+      <button class="cali-next-btn" onclick="caliApplyLevelUp(${s.exercise_id_current},${s.exercise_id_next})">Так, перейти</button>
+      <button class="cali-next-btn" style="background:transparent;color:var(--text);border:1px solid var(--border);margin-top:8px" onclick="caliDismissLevelUp()">Поки що ні</button>
+    </div>`;
+  overlay.id = 'cali-levelup-overlay';
+  document.body.appendChild(overlay);
+}
+
+
+function caliDismissLevelUp() {
+  const overlay = document.getElementById('cali-levelup-overlay');
+  if (overlay) overlay.remove();
   caliReloadProgramData().then(() => renderCalisthenicsHome());
+}
+
+
+async function caliApplyLevelUp(fromId, toId) {
+  const programId = S.calisthenicsProgram.id;
+  const r = await api('POST', `/api/calisthenics/program/${programId}/level-up`,
+    { from_exercise_id: fromId, to_exercise_id: toId });
+  const overlay = document.getElementById('cali-levelup-overlay');
+  if (overlay) overlay.remove();
+  if (r.success) {
+    const progR = await api('GET', '/api/calisthenics/program/active');
+    S.calisthenicsProgram = (progR && progR.success) ? progR.data : null;
+  }
+  await caliReloadProgramData();
+  renderCalisthenicsHome();
 }
 
 // ── NUTRITION ──
