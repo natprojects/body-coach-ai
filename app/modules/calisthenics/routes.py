@@ -7,6 +7,10 @@ from .models import CalisthenicsProfile, CalisthenicsAssessment
 _VALID_GOALS = {'muscle', 'strength', 'skill', 'weight_loss', 'endurance'}
 _VALID_EQUIPMENT = {'none', 'floor', 'bands', 'dumbbells', 'pullup_bar', 'dip_bars', 'rings', 'parallettes'}
 _VALID_MOTIVATION = {'look', 'feel', 'achieve', 'health'}
+_ALWAYS_REQUIRED_FIELDS = [
+    'australian_pullups', 'pushups', 'pike_pushups', 'squats',
+    'superman_hold', 'plank', 'hollow_body', 'lunges',
+]
 
 
 def _profile_to_dict(profile: CalisthenicsProfile) -> dict:
@@ -99,12 +103,6 @@ def set_calisthenics_profile():
         db.session.add(profile)
     db.session.commit()
     return jsonify({'success': True, 'data': _profile_to_dict(profile)})
-
-
-_ALWAYS_REQUIRED_FIELDS = [
-    'australian_pullups', 'pushups', 'pike_pushups', 'squats',
-    'superman_hold', 'plank', 'hollow_body', 'lunges',
-]
 
 
 @bp.route('/calisthenics/assessment', methods=['POST'])

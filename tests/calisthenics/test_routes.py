@@ -289,19 +289,20 @@ def test_get_assessment_history_returns_all(app, client, db):
     _make_profile(db, user.id)
     now = datetime.utcnow()
     for i in range(3):
-        db.session.add(CalisthenicsAssessment(
+        a = CalisthenicsAssessment(
             user_id=user.id, pushups=10 + i, squats=20, plank=30,
             hollow_body=15, lunges=10, australian_pullups=5,
             pike_pushups=8, superman_hold=20,
             assessed_at=now - timedelta(seconds=2 - i),
-        ))
+        )
+        db.session.add(a)
     db.session.commit()
     r = client.get('/api/calisthenics/assessment/history', headers=_h(app, user.id))
     assert r.status_code == 200
     data = r.get_json()['data']
     assert len(data) == 3
-    # newest first
-    assert data[0]['pushups'] >= data[1]['pushups']
+    # Verify newest-first ordering across all three entries
+    assert data[0]['pushups'] > data[1]['pushups'] > data[2]['pushups']
 
 
 def test_get_assessment_history_empty(app, client, db):
@@ -309,3 +310,13 @@ def test_get_assessment_history_empty(app, client, db):
     r = client.get('/api/calisthenics/assessment/history', headers=_h(app, user.id))
     assert r.status_code == 200
     assert r.get_json()['data'] == []
+
+
+def test_post_assessment_requires_auth(app, client, db):
+    r = client.post('/api/calisthenics/assessment', json={})
+    assert r.status_code == 401
+
+
+def test_get_assessment_history_requires_auth(app, client, db):
+    r = client.get('/api/calisthenics/assessment/history')
+    assert r.status_code == 401
