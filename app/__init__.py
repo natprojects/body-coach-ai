@@ -12,6 +12,7 @@ def create_app(config_class=Config):
 
     from .core import models  # noqa: F401 — ensure models are registered with SQLAlchemy
     from .modules.coach import models as coach_models  # noqa: F401
+    from .modules.calisthenics import models as calisthenics_models  # noqa: F401
 
     from .core.routes import bp as core_bp
     app.register_blueprint(core_bp, url_prefix='/api')
@@ -24,6 +25,9 @@ def create_app(config_class=Config):
 
     from .modules.nutrition import bp as nutrition_bp
     app.register_blueprint(nutrition_bp, url_prefix='/api')
+
+    from .modules.calisthenics import bp as calisthenics_bp
+    app.register_blueprint(calisthenics_bp, url_prefix='/api')
 
     @app.route('/')
     def index():
