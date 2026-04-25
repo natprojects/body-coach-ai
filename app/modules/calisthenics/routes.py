@@ -349,6 +349,7 @@ def get_today():
 
 
 from app.modules.training.models import LoggedExercise, LoggedSet
+from .level_up import compute_level_up_suggestions
 
 
 @bp.route('/calisthenics/session/start', methods=['POST'])
@@ -469,5 +470,59 @@ def post_complete(session_id):
     session.status = 'completed'
     db.session.commit()
 
-    # Level-up suggestions added in Task 8 — empty list for now
-    return jsonify({'success': True, 'data': {'level_up_suggestions': []}})
+    program = Program.query.filter_by(
+        user_id=g.user_id, module='calisthenics', status='active'
+    ).first()
+    suggestions = compute_level_up_suggestions(g.user_id, program) if program else []
+
+    return jsonify({'success': True, 'data': {'level_up_suggestions': suggestions}})
+
+
+@bp.route('/calisthenics/program/<int:program_id>/level-up', methods=['POST'])
+@require_auth
+def post_level_up(program_id):
+    program = Program.query.filter_by(
+        id=program_id, user_id=g.user_id, module='calisthenics', status='active'
+    ).first()
+    if not program:
+        return jsonify({'success': False, 'error': {
+            'code': 'PROGRAM_NOT_FOUND', 'message': 'Program not found',
+        }}), 404
+
+    data = request.json or {}
+    from_id = data.get('from_exercise_id')
+    to_id = data.get('to_exercise_id')
+
+    suggestions = compute_level_up_suggestions(g.user_id, program)
+    valid = any(s['exercise_id_current'] == from_id and s['exercise_id_next'] == to_id
+                for s in suggestions)
+    if not valid:
+        return jsonify({'success': False, 'error': {
+            'code': 'LEVEL_UP_NOT_READY',
+            'message': 'Promotion criteria not met',
+        }}), 400
+
+    new_ex = Exercise.query.filter_by(id=to_id, module='calisthenics').first()
+    if not new_ex:
+        return jsonify({'success': False, 'error': {
+            'code': 'INVALID_EXERCISE', 'message': 'Target exercise invalid',
+        }}), 400
+
+    workout_exercises = (WorkoutExercise.query
+                         .join(Workout).join(ProgramWeek).join(Mesocycle)
+                         .filter(Mesocycle.program_id == program_id,
+                                 WorkoutExercise.exercise_id == from_id)
+                         .all())
+    for we in workout_exercises:
+        we.exercise_id = to_id
+        for ps in PlannedSet.query.filter_by(workout_exercise_id=we.id).all():
+            if new_ex.unit == 'seconds':
+                ps.target_reps = None
+                ps.target_seconds = max(15, (ps.target_seconds or 30) - 10)
+            else:
+                ps.target_reps = '6-10'
+                ps.target_seconds = None
+            ps.target_weight_kg = None
+
+    db.session.commit()
+    return jsonify({'success': True, 'data': {'swapped_count': len(workout_exercises)}})
