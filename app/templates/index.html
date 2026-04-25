@@ -984,6 +984,11 @@ const S = {
   activeModule: localStorage.getItem('bca_active_module') || 'gym',
   calisthenicsProfile: null,
   calisthenicsLastAssessment: null,
+  calisthenicsProgram: null,
+  calisthenicsToday: null,
+  calisthenicsWeekOverview: null,
+  calisthenicsCompletedCount: 0,
+  calisthenicsActiveSession: null,
 };
 
 const RPE_LABELS = {5: 'Легко', 7: 'Нормально', 8: 'Важко', 9: 'На межі'};
@@ -1900,9 +1905,28 @@ async function loadCalisthenicsMode() {
     return;
   }
   S.calisthenicsProfile = r.data;
+
   const ar = await api('GET', '/api/calisthenics/assessment/history');
   S.calisthenicsLastAssessment = (ar && ar.success && ar.data && ar.data.length > 0) ? ar.data[0] : null;
+
+  const programR = await api('GET', '/api/calisthenics/program/active');
+  S.calisthenicsProgram = (programR && programR.success) ? programR.data : null;
+  if (S.calisthenicsProgram) {
+    await caliReloadProgramData();
+  }
   renderCalisthenicsHome();
+}
+
+
+async function caliReloadProgramData() {
+  const [todayR, overviewR] = await Promise.all([
+    api('GET', '/api/calisthenics/today'),
+    api('GET', '/api/training/week-overview'),
+  ]);
+  S.calisthenicsToday = (todayR && todayR.success) ? todayR.data : null;
+  S.calisthenicsWeekOverview = (overviewR && overviewR.success) ? overviewR.data : null;
+  S.calisthenicsCompletedCount = ((overviewR && overviewR.data && overviewR.data.workouts) || [])
+    .filter(w => w.status === 'done').length;
 }
 
 function renderCalisthenicsWizard() {
@@ -2112,10 +2136,15 @@ async function caliSubmitAssessment() {
 function renderCalisthenicsHome() {
   const el = document.getElementById('train-content');
   const a = S.calisthenicsLastAssessment;
-  const assessedDate = a ? new Date(a.assessed_at).toLocaleDateString('uk-UA', { day: 'numeric', month: 'long' }) : null;
+  const program = S.calisthenicsProgram;
+  const today = S.calisthenicsToday;
+  const weekOverview = S.calisthenicsWeekOverview;
 
-  const statsHtml = a ? `
-    <div class="cali-assess-card">
+  const assessedDate = a ? new Date(a.assessed_at).toLocaleDateString('uk-UA',
+    { day: 'numeric', month: 'long' }) : null;
+
+  const lastAssessSmall = a ? `
+    <div class="cali-assess-card" style="margin-top:16px">
       <div class="cali-assess-card-title">Остання оцінка · ${assessedDate}</div>
       <div class="cali-assess-grid">
         ${a.pushups != null ? `<div class="cali-assess-stat"><div class="cali-assess-stat-val">${a.pushups}</div><div class="cali-assess-stat-label">Віджимань</div></div>` : ''}
@@ -2123,20 +2152,94 @@ function renderCalisthenicsHome() {
         ${a.squats != null ? `<div class="cali-assess-stat"><div class="cali-assess-stat-val">${a.squats}</div><div class="cali-assess-stat-label">Присідань</div></div>` : ''}
       </div>
       <button class="cali-next-btn" style="margin-top:12px" onclick="renderCalisthenicsAssessment()">Пройти тест знову</button>
+    </div>` : '';
+
+  // STATE A — no program yet
+  if (!program) {
+    el.innerHTML = `
+      <div class="cali-home">
+        ${a ? lastAssessSmall : `
+          <div class="cali-assess-card">
+            <div class="cali-assess-card-title">Базова оцінка</div>
+            <div style="color:var(--muted);font-size:13px;margin-bottom:12px">Пройди стартовий тест щоб система склала програму під тебе</div>
+            <button class="cali-next-btn" onclick="renderCalisthenicsAssessment()">Почати тест</button>
+          </div>`}
+        ${a ? `
+          <div class="cali-assess-card">
+            <div class="cali-assess-card-title">Програма</div>
+            <div style="color:var(--muted);font-size:13px;margin-bottom:12px">Згенеруємо персональний план на основі твоєї оцінки</div>
+            <button class="cali-next-btn" onclick="caliGenerateProgram()">Створити програму</button>
+          </div>` : ''}
+      </div>`;
+    return;
+  }
+
+  // STATE B — active program
+  const dowNames = {0:'Пн',1:'Вт',2:'Ср',3:'Чт',4:'Пт',5:'Сб',6:'Нд'};
+  const todayCard = !today ? '' : (today.rest_day ? `
+    <div class="cali-assess-card">
+      <div class="cali-assess-card-title">Сьогодні</div>
+      <div style="font-size:18px;margin-bottom:8px">Відпочинок 💤</div>
+      <div style="font-size:13px;color:var(--muted)">Якщо є настрій — обери тренування нижче</div>
     </div>` : `
     <div class="cali-assess-card">
-      <div class="cali-assess-card-title">Базова оцінка</div>
-      <div style="color:var(--muted);font-size:13px;margin-bottom:12px">Пройди стартовий тест щоб відстежувати прогрес</div>
-      <button class="cali-next-btn" onclick="renderCalisthenicsAssessment()">Почати тест</button>
-    </div>`;
+      <div class="cali-assess-card-title">Сьогодні${today.ad_hoc ? ' · Позапланове' : ''}</div>
+      <div style="font-size:20px;font-weight:700;margin-bottom:6px">${today.name}</div>
+      ${today.estimated_duration_min ? `<div style="font-size:13px;color:var(--muted);margin-bottom:8px">~${today.estimated_duration_min} хв · ${(today.exercises||[]).length} вправ</div>` : ''}
+      <button class="cali-next-btn" onclick="caliStartSession(${today.id})">Почати тренування</button>
+    </div>`);
+
+  const overviewCard = weekOverview && weekOverview.workouts && weekOverview.workouts.length ? `
+    <div class="cali-assess-card">
+      <div class="cali-assess-card-title">Інше тренування цього тижня</div>
+      ${weekOverview.workouts.map(w => `
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border)">
+          <div>
+            <div style="font-size:14px">${w.name}</div>
+            <div style="font-size:11px;color:var(--muted)">${dowNames[w.day_of_week] || ''}</div>
+          </div>
+          ${(() => {
+            if (w.status === 'done') return '<span style="font-size:12px;color:var(--muted)">✓ зроблено</span>';
+            if (w.status === 'today') return `<button class="cali-next-btn" style="width:auto;padding:6px 12px;font-size:12px" onclick="caliStartSession(${w.id})">→</button>`;
+            return `<button class="cali-next-btn" style="width:auto;padding:6px 12px;font-size:12px;background:transparent;border:1px solid var(--border);color:var(--text)" onclick="caliStartSession(${w.id})">Почати</button>`;
+          })()}
+        </div>`).join('')}
+    </div>` : '';
 
   el.innerHTML = `
     <div class="cali-home">
-      ${statsHtml}
-      <div style="color:var(--muted);font-size:13px;text-align:center;padding:20px">
-        Програма тренувань — незабаром
-      </div>
+      ${todayCard}
+      ${overviewCard}
+      ${lastAssessSmall}
     </div>`;
+}
+
+
+async function caliGenerateProgram() {
+  const el = document.getElementById('train-content');
+  el.innerHTML = `
+    <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:60vh">
+      <div style="width:48px;height:48px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:caliSpin 1s linear infinite;margin-bottom:20px"></div>
+      <div style="font-family:'Barlow Condensed',sans-serif;font-size:18px;text-transform:uppercase;letter-spacing:.05em">Створюю твою програму…</div>
+      <div style="font-size:13px;color:var(--muted);margin-top:8px">Це займе 5-15 секунд</div>
+    </div>
+    <style>@keyframes caliSpin{to{transform:rotate(360deg)}}</style>`;
+
+  const r = await api('POST', '/api/calisthenics/program/generate');
+  if (!r.success) {
+    alert('Не вдалось створити програму: ' + (r.error?.message || 'спробуй ще раз'));
+    renderCalisthenicsHome();
+    return;
+  }
+  S.calisthenicsProgram = r.data;
+  await caliReloadProgramData();
+  renderCalisthenicsHome();
+}
+
+
+// Stub for caliStartSession — implemented in Task 11
+async function caliStartSession(workoutId) {
+  alert('Workout view — в наступній задачі');
 }
 
 // ── NUTRITION ──
