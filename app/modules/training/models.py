@@ -10,6 +10,7 @@ class Program(db.Model):
     periodization_type = db.Column(db.String(20), nullable=False)  # linear / wave / block
     total_weeks = db.Column(db.Integer, nullable=False)
     status = db.Column(db.String(20), default='active')  # active / completed / paused
+    module = db.Column(db.String(20), default='gym', nullable=False, server_default='gym')
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     mesocycles = db.relationship('Mesocycle', backref='program', order_by='Mesocycle.order_index',
@@ -70,6 +71,10 @@ class Exercise(db.Model):
     is_corrective = db.Column(db.Boolean, default=False)
     is_prehab = db.Column(db.Boolean, default=False)
     technique_text = db.Column(db.Text)
+    module = db.Column(db.String(20), default='gym', nullable=False, server_default='gym')
+    progression_chain = db.Column(db.String(30))     # 'push' | 'pull' | 'squat' | 'core_dynamic' | 'core_static' | 'lunge'
+    progression_level = db.Column(db.Integer)        # 0..N within chain
+    unit = db.Column(db.String(10))                  # 'reps' | 'seconds'
 
 
 class WorkoutExercise(db.Model):
@@ -100,6 +105,8 @@ class PlannedSet(db.Model):
     target_weight_kg = db.Column(db.Float)
     target_rpe = db.Column(db.Float)
     rest_seconds = db.Column(db.Integer)
+    is_amrap = db.Column(db.Boolean, default=False, nullable=False, server_default='0')
+    target_seconds = db.Column(db.Integer)
 
 
 class WorkoutSession(db.Model):
@@ -114,6 +121,7 @@ class WorkoutSession(db.Model):
     cycle_phase = db.Column(db.String(20), nullable=True)
     cycle_adapted = db.Column(db.Boolean, default=False)
     last_exercise_id = db.Column(db.Integer, db.ForeignKey('exercises.id'), nullable=True)
+    module = db.Column(db.String(20), default='gym', nullable=False, server_default='gym')
 
     logged_exercises = db.relationship('LoggedExercise', backref='session',
                                        order_by='LoggedExercise.order_index',
@@ -141,6 +149,7 @@ class LoggedSet(db.Model):
     actual_reps = db.Column(db.Integer)
     actual_weight_kg = db.Column(db.Float)
     actual_rpe = db.Column(db.Float)
+    actual_seconds = db.Column(db.Integer)
     notes = db.Column(db.Text)
     logged_at = db.Column(db.DateTime, default=datetime.utcnow)
 

@@ -11,7 +11,8 @@ from .models import (
 
 def build_training_context(user_id: int, session_id: int = None) -> str:
     parts = []
-    program = Program.query.filter_by(user_id=user_id, status='active').first()
+    user = db.session.get(User, user_id)
+    program = Program.query.filter_by(user_id=user_id, status='active', module=user.active_module).first()
     if program:
         parts.append(f"\n## Active Program: {program.name} ({program.periodization_type})")
         parts.append(f"Total weeks: {program.total_weeks}")
@@ -33,14 +34,16 @@ def build_training_context(user_id: int, session_id: int = None) -> str:
 
 def save_program_from_dict(user_id: int, program_dict: dict) -> Program:
     """Parse AI-generated program JSON and persist to DB."""
-    # Deactivate any existing active program
-    Program.query.filter_by(user_id=user_id, status='active').update({'status': 'paused'})
+    # Deactivate any existing active gym program
+    Program.query.filter_by(user_id=user_id, status='active', module='gym').update({'status': 'paused'})
 
     program = Program(
         user_id=user_id,
         name=program_dict['name'],
         periodization_type=program_dict['periodization_type'],
         total_weeks=program_dict['total_weeks'],
+        status='active',
+        module='gym',
     )
     db.session.add(program)
     db.session.flush()
@@ -106,9 +109,9 @@ def save_program_from_dict(user_id: int, program_dict: dict) -> Program:
 
 
 def _get_or_create_exercise(name: str) -> Exercise:
-    exercise = Exercise.query.filter_by(name=name).first()
+    exercise = Exercise.query.filter_by(name=name, module='gym').first()
     if not exercise:
-        exercise = Exercise(name=name)
+        exercise = Exercise(name=name, module='gym')
         db.session.add(exercise)
         db.session.flush()
     return exercise
