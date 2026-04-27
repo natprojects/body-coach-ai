@@ -94,7 +94,8 @@ JSON structure:
 
 Use day_of_week 0=Mon..6=Sun."""
 
-    raw = complete(system_prompt=system_prompt, user_message=user_prompt, max_tokens=4096)
+    raw = complete(system_prompt=system_prompt, user_message=user_prompt,
+                   max_tokens=4096, model='claude-sonnet-4-6')
     # Strip markdown code fences that the model sometimes wraps around JSON
     raw = re.sub(r'^```(?:json)?\s*', '', raw.strip())
     raw = re.sub(r'\s*```$', '', raw).strip()
