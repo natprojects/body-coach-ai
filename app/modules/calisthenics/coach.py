@@ -377,7 +377,8 @@ def generate_calisthenics_insights(program, user, profile, last_assessment) -> i
         "Return JSON array with fields: workout_exercise_id, selection_reason, expected_outcome"
     )
 
-    raw = complete(system_prompt, user_prompt, max_tokens=8192, model='claude-sonnet-4-6')
+    raw = complete(system_prompt, user_prompt, max_tokens=8192,
+                   model='claude-haiku-4-5-20251001')
     raw = re.sub(r'^```(?:json)?\s*', '', raw.strip())
     raw = re.sub(r'\s*```$', '', raw).strip()
 
