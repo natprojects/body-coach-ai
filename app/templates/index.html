@@ -2467,9 +2467,13 @@ async function generateMiniSession(type) {
     workout: r.data,
     logged: {},
   };
-  // renderCalisthenicsWorkout reads workout.id to know what to render — set it
   S.calisthenicsActiveSession.workout.id = workoutId;
-  renderCalisthenicsWorkout();
+  // Stretch is itself a warmup — skip the reminder for that type
+  if (type === 'stretch') {
+    renderCalisthenicsWorkout();
+  } else {
+    showWarmupReminder(r.data, () => renderCalisthenicsWorkout());
+  }
 }
 
 
@@ -2664,12 +2668,7 @@ async function caliGenerateProgram() {
 
 
 async function caliStartSession(workoutId) {
-  const r = await api('POST', '/api/calisthenics/session/start', { workout_id: workoutId });
-  if (!r.success) {
-    alert('Не вдалось почати: ' + (r.error?.message || ''));
-    return;
-  }
-  // Find the workout dict
+  // Find the workout dict FIRST to get warmup_notes for the reminder
   let workout = null;
   const today = S.calisthenicsToday;
   if (today && today.id === workoutId) {
@@ -2693,12 +2692,54 @@ async function caliStartSession(workoutId) {
     alert('Не вдалось знайти тренування');
     return;
   }
-  S.calisthenicsActiveSession = {
-    session_id: r.data.session_id,
-    workout: workout,
-    logged: {},  // {workoutExerciseId: {setNumber: value}}
-  };
-  renderCalisthenicsWorkout();
+
+  // Show warmup reminder first; on confirm, actually start the session
+  showWarmupReminder(workout, async () => {
+    const r = await api('POST', '/api/calisthenics/session/start', { workout_id: workoutId });
+    if (!r.success) {
+      alert('Не вдалось почати: ' + (r.error?.message || ''));
+      return;
+    }
+    S.calisthenicsActiveSession = {
+      session_id: r.data.session_id,
+      workout: workout,
+      logged: {},
+    };
+    renderCalisthenicsWorkout();
+  });
+  return;
+}
+
+
+function showWarmupReminder(workout, onProceed) {
+  const overlay = document.createElement('div');
+  overlay.id = 'warmup-overlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:1000;display:flex;align-items:center;justify-content:center;padding:20px';
+  const warmupText = (workout && workout.warmup_notes)
+    ? `<div style="font-size:13px;color:var(--text);line-height:1.5;margin-bottom:12px">${_esc(workout.warmup_notes)}</div>`
+    : '';
+  overlay.innerHTML = `
+    <div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:22px;max-width:340px;width:100%">
+      <div style="font-size:36px;text-align:center;margin-bottom:8px">🔥</div>
+      <div style="font-family:'Barlow Condensed',sans-serif;font-size:20px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;text-align:center;margin-bottom:14px">Розминка перед тренуванням</div>
+      ${warmupText}
+      <div style="font-size:13px;color:var(--muted);margin-bottom:14px;line-height:1.5">
+        5-10 хвилин: суглобова мобільність (плечі, стегна, спина), легке кардіо для розігріву, динамічні розтяжки. Не стрибай у важкі повтори холодною — ризик травми.
+      </div>
+      <button class="btn btn-primary" id="warmup-proceed-btn">Я готова, починаю</button>
+      <button class="btn btn-ghost" style="margin-top:8px" onclick="closeWarmupReminder()">Скасувати</button>
+    </div>`;
+  document.body.appendChild(overlay);
+  document.getElementById('warmup-proceed-btn').addEventListener('click', () => {
+    closeWarmupReminder();
+    if (typeof onProceed === 'function') onProceed();
+  });
+}
+
+
+function closeWarmupReminder() {
+  const o = document.getElementById('warmup-overlay');
+  if (o) o.remove();
 }
 
 
