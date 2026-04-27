@@ -3396,7 +3396,11 @@ function _renderCoachMessages() {
 async function sendCoachMessage() {
   const input = document.getElementById('coach-input');
   const msg = (input.value || '').trim();
-  if (!msg || S.coachStreaming || !S.activeThread) return;
+  if (!msg || S.coachStreaming) return;
+  // Defensive: if state was lost (e.g., WebApp reloaded), recover
+  if (!S.activeThread) {
+    S.activeThread = {id: null, title: 'Нова розмова', messages: []};
+  }
 
   // Create thread lazily on first message
   if (!S.activeThread.id) {
