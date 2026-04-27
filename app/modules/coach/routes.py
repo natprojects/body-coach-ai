@@ -32,7 +32,7 @@ def list_threads():
 @bp.route('/coach/threads', methods=['POST'])
 @require_auth
 def create_thread():
-    data = request.json or {}
+    data = request.get_json(silent=True) or {}
     role = data.get('system_role')
     if role and role not in ('nutritionist',):
         return jsonify({'success': False, 'error': {

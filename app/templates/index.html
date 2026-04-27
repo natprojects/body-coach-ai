@@ -3406,11 +3406,8 @@ async function sendCoachMessage() {
 
   // Create thread lazily on first message
   if (!S.activeThread.id) {
-    const cr = await api('POST', '/api/coach/threads');
-    if (!cr || !cr.success) {
-      alert('DEBUG thread create failed: ' + JSON.stringify(cr).slice(0, 300));
-      return;
-    }
+    const cr = await api('POST', '/api/coach/threads', {});
+    if (!cr || !cr.success) return;
     S.activeThread.id = cr.data.thread_id;
   }
 
@@ -3469,10 +3466,7 @@ async function sendCoachMessage() {
       }
     }
   } catch (e) {
-    aiText = 'Помилка з\'єднання: ' + (e && e.message ? e.message : String(e));
-  }
-  if (!aiText) {
-    aiText = '⚠️ Сервер не повернув відповіді (можливо API ключ або ліміт). Передивись prod logs.';
+    aiText = 'Помилка з\'єднання. Спробуй ще раз.';
   }
 
   // Finalize bubble (remove cursor)
