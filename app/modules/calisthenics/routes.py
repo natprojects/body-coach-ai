@@ -650,6 +650,33 @@ def _serialize_mini_workout(workout) -> dict:
     }
 
 
+@bp.route('/calisthenics/stats/weekly', methods=['GET'])
+@require_auth
+def get_weekly_stats():
+    from datetime import date, timedelta
+    today = date.today()
+    monday = today - timedelta(days=today.weekday())
+
+    profile = CalisthenicsProfile.query.filter_by(user_id=g.user_id).first()
+    main_target = profile.days_per_week if profile else 0
+    mini_target = profile.optional_target_per_week if profile else 0
+
+    sessions = WorkoutSession.query.filter(
+        WorkoutSession.user_id == g.user_id,
+        WorkoutSession.module == 'calisthenics',
+        WorkoutSession.status == 'completed',
+        WorkoutSession.date >= monday,
+    ).all()
+    main_done = sum(1 for s in sessions if s.kind == 'main')
+    mini_done = sum(1 for s in sessions if s.kind == 'mini')
+
+    return jsonify({'success': True, 'data': {
+        'week_start': monday.isoformat(),
+        'main_done': main_done, 'main_target': main_target,
+        'mini_done': mini_done, 'mini_target': mini_target,
+    }})
+
+
 @bp.route('/calisthenics/mini-session/generate', methods=['POST'])
 @require_auth
 def post_generate_mini_session():
