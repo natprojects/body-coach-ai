@@ -41,6 +41,19 @@ def generate_calisthenics_program(user, profile: CalisthenicsProfile,
     days = profile.days_per_week or 3
     duration = profile.session_duration_min or 45
 
+    equipment = profile.equipment or []
+    pull_gear = {'pullup_bar', 'dip_bars', 'rings'}
+    has_pull_gear = any(e in pull_gear for e in equipment)
+    equipment_block = f"USER EQUIPMENT: {equipment}\n"
+    if not has_pull_gear:
+        equipment_block += (
+            "STRICT: USER HAS NO PULL-UP BAR / DIP BARS / RINGS. "
+            "DO NOT include ANY exercise from the 'pull' chain. "
+            "DO NOT include 'hanging knee raise', 'hanging leg raise', 'toes-to-bar' "
+            "(these need a bar). Allowed chains: push, squat, lunge, core_static, "
+            "and core_dynamic level 0 only (dead bug)."
+        )
+
     system_prompt = f"""You are an expert calisthenics coach.
 Generate a calisthenics training program as compact JSON only — no prose, no markdown, just valid JSON.
 
@@ -53,6 +66,8 @@ STRICT OUTPUT CONSTRAINTS:
 
 CLOSED EXERCISE LIST (use ONLY these names, exactly as written):
 {json.dumps(catalog, ensure_ascii=False)}
+
+{equipment_block}
 
 LEVEL SELECTION HEURISTICS based on the user's assessment:
 - pushups <5 → pick push level 1-2; 5-12 → level 3; 13-25 → level 4; 25+ → level 5+
@@ -408,12 +423,33 @@ def generate_program_extension(user, profile: CalisthenicsProfile,
     busy_dows = sorted({w['day_of_week'] for w in existing_workouts})
     used_chain_combos = [w.get('chains', []) for w in existing_workouts]
 
+    equipment = profile.equipment or []
+    pull_gear = {'pullup_bar', 'dip_bars', 'rings'}
+    has_pull_gear = any(e in pull_gear for e in equipment)
+    equipment_rules = []
+    if not has_pull_gear:
+        equipment_rules.append(
+            "- USER HAS NO PULL-UP BAR / DIP BARS / RINGS. "
+            "DO NOT include any exercise from the 'pull' chain (no pullups, australian pullups, dead hangs, etc.). "
+            "DO NOT include 'hanging knee raise', 'hanging leg raise', 'toes-to-bar' from core_dynamic chain — these need a bar. "
+            "Use only push, squat, lunge, core_static chains and dead bug from core_dynamic."
+        )
+
     system_prompt = f"""You are an expert calisthenics coach.
 Extend an existing weekly program by generating {additional_days} ADDITIONAL workouts.
 Return ONLY JSON array of workout objects — no prose, no markdown.
 
 Existing workouts (DO NOT regenerate, DO NOT include in output):
 {json.dumps(existing_workouts, ensure_ascii=False)}
+
+USER EQUIPMENT: {equipment}
+{chr(10).join(equipment_rules) if equipment_rules else ''}
+
+INJURIES: {profile.injuries or []}
+- knees → no jumping lunge, no pistol squat
+- wrists → skip diamond pushup
+- shoulders → no decline pushup, no archer pushup
+- back → no dragon flag negative
 
 CONSTRAINTS:
 - Output exactly {additional_days} workout objects in a JSON array
