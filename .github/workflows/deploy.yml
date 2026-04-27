@@ -10,15 +10,28 @@ jobs:
     steps:
       - name: Deploy to server
         uses: appleboy/ssh-action@v1.0.0
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         with:
           host: ${{ secrets.HETZNER_HOST }}
           port: ${{ secrets.HETZNER_PORT }}
           username: ${{ secrets.HETZNER_USER }}
           password: ${{ secrets.HETZNER_PASS }}
+          envs: ANTHROPIC_API_KEY
           script: |
             cd /srv/gym-coach
             git fetch origin main
             git reset --hard origin/main
+            # Sync ANTHROPIC_API_KEY from GitHub Secret into server .env (only if secret is set)
+            if [ -n "$ANTHROPIC_API_KEY" ]; then
+              touch .env
+              # Replace existing line or append
+              if grep -q '^ANTHROPIC_API_KEY=' .env; then
+                sed -i "s|^ANTHROPIC_API_KEY=.*|ANTHROPIC_API_KEY=$ANTHROPIC_API_KEY|" .env
+              else
+                echo "ANTHROPIC_API_KEY=$ANTHROPIC_API_KEY" >> .env
+              fi
+            fi
             docker compose up -d --build
             sleep 5
             docker compose exec -T gym-coach flask db upgrade
