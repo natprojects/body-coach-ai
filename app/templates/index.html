@@ -2745,9 +2745,18 @@ function renderCalisthenicsWorkout() {
           </div>
         </div>`;
     }).join('');
+    const ytQuery = encodeURIComponent(ex.exercise_name + ' calisthenics form');
     return `
       <div class="cali-ex-card">
-        <div class="cali-ex-name">${ex.exercise_name}</div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+          <div class="cali-ex-name">${ex.exercise_name}</div>
+          <div style="display:flex;gap:6px">
+            <a href="https://youtube.com/results?search_query=${ytQuery}" target="_blank"
+               class="cali-set-btn" style="text-decoration:none;font-size:11px">▶ YouTube</a>
+            <button class="cali-set-btn" style="font-size:11px"
+                    onclick="openSwapPicker(${ex.id},${ex.exercise_id})">↻ Замінити</button>
+          </div>
+        </div>
         <div class="cali-ex-target">${ex.tempo || ''} ${ex.notes || ''}</div>
         ${setsHtml}
       </div>`;
@@ -2815,6 +2824,68 @@ async function caliLogAmrapSet(exId, setNumber, isSeconds) {
     sess.logged[exId][setNumber] = v;
     renderCalisthenicsWorkout();
   }
+}
+
+
+async function openSwapPicker(workoutExerciseId, currentExerciseId) {
+  const r = await api('GET', `/api/calisthenics/exercise/${currentExerciseId}/regressions`);
+  if (!r || !r.success) {
+    alert('Не вдалось завантажити варіанти');
+    return;
+  }
+  const d = r.data;
+  const overlay = document.createElement('div');
+  overlay.id = 'swap-picker-overlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:1000;display:flex;align-items:center;justify-content:center;padding:20px';
+  const optionsHtml = d.options.map(o => {
+    const cls = o.is_current ? 'cali-set-btn done' : 'cali-set-btn';
+    const dir = o.level < d.current_level ? '↓ легше'
+              : o.level > d.current_level ? '↑ складніше' : '• поточне';
+    return `<button class="${cls}" style="display:block;width:100%;text-align:left;margin-bottom:6px;padding:10px"
+            ${o.is_current ? 'disabled' : `onclick="confirmSwap(${workoutExerciseId},${o.id})"`}>
+              <span style="font-size:14px">${o.name}</span>
+              <span style="display:block;font-size:11px;color:var(--muted);margin-top:2px">Рівень ${o.level} · ${dir}</span>
+            </button>`;
+  }).join('');
+  overlay.innerHTML = `
+    <div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:18px;max-width:340px;width:100%;max-height:80vh;overflow-y:auto">
+      <div style="font-family:'Barlow Condensed',sans-serif;font-size:16px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;margin-bottom:12px">Замінити вправу</div>
+      <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:12px">Ланцюг: ${d.chain}</div>
+      ${optionsHtml}
+      <button class="btn btn-ghost" style="margin-top:8px" onclick="closeSwapPicker()">Скасувати</button>
+    </div>`;
+  document.body.appendChild(overlay);
+}
+
+
+function closeSwapPicker() {
+  const o = document.getElementById('swap-picker-overlay');
+  if (o) o.remove();
+}
+
+
+async function confirmSwap(workoutExerciseId, targetExerciseId) {
+  const r = await api('POST', `/api/calisthenics/workout-exercise/${workoutExerciseId}/swap`,
+    {target_exercise_id: targetExerciseId});
+  closeSwapPicker();
+  if (!r || !r.success) {
+    alert('Не вдалось замінити: ' + (r?.error?.message || ''));
+    return;
+  }
+  // Reload workout view: re-fetch active program/today + re-render
+  // Simplest: refetch the workout from scratch via /today
+  const todayR = await api('GET', '/api/calisthenics/today');
+  if (todayR && todayR.success && todayR.data && todayR.data.id === S.calisthenicsActiveSession?.workout?.id) {
+    S.calisthenicsActiveSession.workout = todayR.data;
+  } else {
+    // Otherwise just patch the exercise name locally — minimal disruption
+    const sess = S.calisthenicsActiveSession;
+    if (sess && sess.workout) {
+      const ex = sess.workout.exercises.find(e => e.id === workoutExerciseId);
+      if (ex) ex.exercise_name = r.data.new_exercise_name;
+    }
+  }
+  renderCalisthenicsWorkout();
 }
 
 

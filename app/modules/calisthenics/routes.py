@@ -856,3 +856,101 @@ def post_generate_mini_session():
         }}), 500
 
     return jsonify({'success': True, 'data': _serialize_mini_workout(workout)})
+
+
+@bp.route('/calisthenics/exercise/<int:exercise_id>/regressions', methods=['GET'])
+@require_auth
+def get_exercise_regressions(exercise_id):
+    """List easier (and harder) variants in the same progression chain."""
+    ex = db.session.get(Exercise, exercise_id)
+    if not ex or ex.module != 'calisthenics' or not ex.progression_chain:
+        return jsonify({'success': False, 'error': {
+            'code': 'EXERCISE_NOT_FOUND',
+            'message': 'Exercise has no progression chain',
+        }}), 404
+    chain = (Exercise.query
+             .filter_by(module='calisthenics', progression_chain=ex.progression_chain)
+             .order_by(Exercise.progression_level)
+             .all())
+    return jsonify({'success': True, 'data': {
+        'chain': ex.progression_chain,
+        'current_level': ex.progression_level,
+        'options': [{
+            'id': e.id, 'name': e.name,
+            'level': e.progression_level, 'unit': e.unit,
+            'is_current': e.id == ex.id,
+        } for e in chain],
+    }})
+
+
+@bp.route('/calisthenics/workout-exercise/<int:we_id>/swap', methods=['POST'])
+@require_auth
+def post_swap_exercise(we_id):
+    """Swap a WorkoutExercise to a different progression in the same chain.
+    Verifies the WorkoutExercise belongs to the user's calisthenics program (or
+    a mini-workout owned by the user). Does NOT touch logged history."""
+    we = db.session.get(WorkoutExercise, we_id)
+    if not we:
+        return jsonify({'success': False, 'error': {
+            'code': 'NOT_FOUND', 'message': 'Workout exercise not found',
+        }}), 404
+
+    workout = db.session.get(Workout, we.workout_id)
+    if not workout:
+        return jsonify({'success': False, 'error': {
+            'code': 'NOT_FOUND', 'message': 'Workout not found',
+        }}), 404
+
+    # Ownership: mini-workout via Workout.user_id, main via Program.user_id
+    if workout.mini_kind:
+        if workout.user_id != g.user_id:
+            return jsonify({'success': False, 'error': {
+                'code': 'NOT_FOUND', 'message': 'Workout not found',
+            }}), 404
+    else:
+        program = (Program.query
+                   .join(Mesocycle).join(ProgramWeek)
+                   .filter(ProgramWeek.id == workout.program_week_id)
+                   .first())
+        if not program or program.user_id != g.user_id or program.module != 'calisthenics':
+            return jsonify({'success': False, 'error': {
+                'code': 'NOT_FOUND', 'message': 'Workout not found',
+            }}), 404
+
+    data = request.get_json(silent=True) or {}
+    target_id = data.get('target_exercise_id')
+    if not isinstance(target_id, int):
+        return jsonify({'success': False, 'error': {
+            'code': 'INVALID_FIELD', 'message': 'target_exercise_id required',
+        }}), 400
+
+    target = db.session.get(Exercise, target_id)
+    current = db.session.get(Exercise, we.exercise_id)
+    if not target or target.module != 'calisthenics':
+        return jsonify({'success': False, 'error': {
+            'code': 'INVALID_TARGET', 'message': 'Target exercise invalid',
+        }}), 400
+    if not current or current.progression_chain != target.progression_chain:
+        return jsonify({'success': False, 'error': {
+            'code': 'CHAIN_MISMATCH',
+            'message': 'Target must be in the same progression chain',
+        }}), 400
+
+    we.exercise_id = target_id
+    # If unit changed (rep ↔ seconds), update sets accordingly
+    if target.unit != current.unit:
+        sets = PlannedSet.query.filter_by(workout_exercise_id=we.id).all()
+        for ps in sets:
+            if target.unit == 'seconds':
+                ps.target_seconds = ps.target_seconds or 30
+                ps.target_reps = None
+            else:
+                ps.target_reps = ps.target_reps or '8-12'
+                ps.target_seconds = None
+    db.session.commit()
+
+    return jsonify({'success': True, 'data': {
+        'workout_exercise_id': we.id,
+        'new_exercise_name': target.name,
+        'new_level': target.progression_level,
+    }})
