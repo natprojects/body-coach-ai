@@ -1998,7 +1998,7 @@ async function switchTab(name) {
 }
 
 // ── CALISTHENICS ──
-const _caliSetupData = { goals: [], equipment: [], days_per_week: null, session_duration_min: null, injuries: [], motivation: null };
+const _caliSetupData = { goals: [], equipment: [], days_per_week: null, session_duration_min: null, injuries: [], motivation: null, optional_target_per_week: 0 };
 let _caliSetupStep = 1;
 
 async function switchModule(mode) {
@@ -2060,7 +2060,7 @@ async function caliReloadProgramData() {
 function renderCalisthenicsWizard() {
   const el = document.getElementById('train-content');
   _caliSetupStep = 1;
-  Object.assign(_caliSetupData, { goals: [], equipment: [], days_per_week: 4, session_duration_min: 45, injuries: [], motivation: null });
+  Object.assign(_caliSetupData, { goals: [], equipment: [], days_per_week: 4, session_duration_min: 45, injuries: [], motivation: null, optional_target_per_week: 0 });
   el.innerHTML = `
     <div class="cali-setup">
       <div class="cali-setup-step active" id="cali-step-1">
@@ -2092,6 +2092,12 @@ function renderCalisthenicsWizard() {
         <div class="cali-chip-group">
           ${[[30,'30хв'],[45,'45хв'],[60,'60хв'],[90,'90хв']].map(([v,l]) =>
             `<button class="cali-chip" onclick="caliSelectDuration(this,${v})">${l}</button>`
+          ).join('')}
+        </div>
+        <div class="cali-setup-title" style="margin-top:20px">Опціональних міні-сесій?</div>
+        <div class="cali-chip-group">
+          ${[0,1,2,3,4].map(n =>
+            `<button class="cali-chip" onclick="caliSelectOptional(this,${n})">${n}</button>`
           ).join('')}
         </div>
         <button class="cali-next-btn" onclick="caliNextStep(3)">Далі →</button>
@@ -2141,6 +2147,12 @@ function caliSelectDuration(btn, val) {
   btn.closest('.cali-chip-group').querySelectorAll('.cali-chip').forEach(b => b.classList.remove('selected'));
   btn.classList.add('selected');
   _caliSetupData.session_duration_min = val;
+}
+
+function caliSelectOptional(btn, val) {
+  btn.closest('.cali-chip-group').querySelectorAll('.cali-chip').forEach(b => b.classList.remove('selected'));
+  btn.classList.add('selected');
+  _caliSetupData.optional_target_per_week = val;
 }
 
 function caliToggleInjury(btn, val) {
