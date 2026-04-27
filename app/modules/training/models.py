@@ -44,6 +44,7 @@ class Workout(db.Model):
     __tablename__ = 'workouts'
     id = db.Column(db.Integer, primary_key=True)
     program_week_id = db.Column(db.Integer, db.ForeignKey('program_weeks.id'), nullable=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
     mini_kind = db.Column(db.String(20))  # 'stretch' | 'short' | 'skill' for mini-sessions; NULL for main
     day_of_week = db.Column(db.Integer, nullable=False)
     name = db.Column(db.String(200), nullable=False)

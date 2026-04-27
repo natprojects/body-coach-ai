@@ -146,3 +146,18 @@ def test_session_start_for_mini_workout_sets_kind(mock_gen, app, client, db):
     s = db.session.get(WorkoutSession, sid)
     assert s.kind == 'mini'
     assert s.module == 'calisthenics'
+
+
+@patch('app.modules.calisthenics.routes.generate_mini_session', return_value=SAMPLE_STRETCH)
+def test_session_start_rejects_other_user_mini_workout(mock_gen, app, client, db):
+    user1, _, _ = _make_user(db, telegram_id=80120)
+    user2, _, _ = _make_user(db, telegram_id=80121)
+    # user1 creates a mini-workout
+    gen = client.post('/api/calisthenics/mini-session/generate',
+                      json={'type': 'stretch'}, headers=_h(app, user1.id))
+    workout_id = gen.get_json()['data']['workout_id']
+    # user2 tries to start a session against user1's mini-workout
+    r = client.post('/api/calisthenics/session/start',
+                    json={'workout_id': workout_id}, headers=_h(app, user2.id))
+    assert r.status_code == 404
+    assert r.get_json()['error']['code'] == 'WORKOUT_NOT_FOUND'

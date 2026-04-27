@@ -85,3 +85,37 @@ def test_context_groups_by_chain(app, db):
 
     ctx = build_coach_context(user.id)
     assert 'push' in ctx.lower()
+
+
+def test_context_includes_amrap_trends(app, db):
+    from app.modules.coach.context import build_coach_context
+    user = _make_user(db, telegram_id=70304)
+    today = date.today()
+    p = Program(user_id=user.id, name='C', periodization_type='hypertrophy',
+                total_weeks=4, status='active', module='calisthenics')
+    db.session.add(p); db.session.flush()
+    m = Mesocycle(program_id=p.id, name='m', order_index=0, weeks_count=1)
+    db.session.add(m); db.session.flush()
+    w = ProgramWeek(mesocycle_id=m.id, week_number=1)
+    db.session.add(w); db.session.flush()
+    workout = Workout(program_week_id=w.id, day_of_week=0, name='Push A', order_index=0)
+    db.session.add(workout); db.session.flush()
+    full_pushup = Exercise.query.filter_by(module='calisthenics', name='full pushup').first()
+    we = WorkoutExercise(workout_id=workout.id, exercise_id=full_pushup.id, order_index=0)
+    db.session.add(we); db.session.commit()
+
+    # 3 sessions with rising AMRAP values
+    for i, val in enumerate([10, 12, 15]):
+        s = WorkoutSession(user_id=user.id, workout_id=workout.id, module='calisthenics',
+                           status='completed', date=today - timedelta(days=10 - i*3), kind='main')
+        db.session.add(s); db.session.flush()
+        le = LoggedExercise(session_id=s.id, exercise_id=full_pushup.id, order_index=0)
+        db.session.add(le); db.session.flush()
+        db.session.add(LoggedSet(logged_exercise_id=le.id, set_number=1, actual_reps=val))
+        db.session.commit()
+
+    ctx = build_coach_context(user.id)
+    # Expect trend line like "full pushup: 10 → 12 → 15"
+    assert 'full pushup' in ctx
+    assert '10' in ctx and '12' in ctx and '15' in ctx
+    assert '→' in ctx

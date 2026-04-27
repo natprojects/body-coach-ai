@@ -392,9 +392,11 @@ def post_session_start():
         }}), 404
 
     if workout.mini_kind:
-        # Mini-session — no program ownership check (mini workouts have program_week_id=NULL)
-        # The user must have a profile (already enforced at /mini-session/generate)
-        pass
+        # Mini-session — verify ownership directly via Workout.user_id
+        if workout.user_id != g.user_id:
+            return jsonify({'success': False, 'error': {
+                'code': 'WORKOUT_NOT_FOUND', 'message': 'Workout not found',
+            }}), 404
     else:
         program = (Program.query
                    .join(Mesocycle).join(ProgramWeek)

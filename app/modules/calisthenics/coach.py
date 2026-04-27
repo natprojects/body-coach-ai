@@ -198,6 +198,7 @@ def save_mini_session_from_dict(user_id: int, mini_type: str, mini_dict: dict) -
     workout = Workout(
         program_week_id=None,
         mini_kind=mini_type,
+        user_id=user_id,  # ownership for mini-workouts
         day_of_week=0,
         name=mini_dict.get('name', f'{mini_type} session'),
         order_index=0,

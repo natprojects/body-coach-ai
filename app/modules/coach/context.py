@@ -133,6 +133,51 @@ def build_coach_context(user_id: int) -> str:
         lines.append(sessions_line)
         if chain_str:
             lines.append(f"- Main by chain: {chain_str}")
+
+        # AMRAP trends: last 3 AMRAP-set values per exercise across calisthenics sessions
+        from app.modules.training.models import LoggedExercise, LoggedSet
+        cali_session_ids = [s.id for s in cali_sessions]
+        amrap_logs = (db.session.query(LoggedExercise, LoggedSet, _Workout, Exercise)
+                      .join(LoggedSet, LoggedSet.logged_exercise_id == LoggedExercise.id)
+                      .join(WorkoutSession, WorkoutSession.id == LoggedExercise.session_id)
+                      .join(_Workout, _Workout.id == WorkoutSession.workout_id)
+                      .join(Exercise, Exercise.id == LoggedExercise.exercise_id)
+                      .filter(WorkoutSession.id.in_(cali_session_ids),
+                              WorkoutSession.kind == 'main')
+                      .order_by(LoggedExercise.exercise_id, WorkoutSession.date)
+                      .all())
+        # Group by exercise; pick the last (highest set_number) logged set per session
+        from collections import defaultdict
+        per_exercise = defaultdict(list)  # exercise_name -> list of (date, value, unit)
+        seen_sessions = defaultdict(set)
+        for le, ls, w, ex in amrap_logs:
+            session_id = le.session_id
+            if session_id in seen_sessions[ex.id]:
+                continue
+            # Take the highest set_number's logged value as AMRAP
+            best = (LoggedSet.query.filter_by(logged_exercise_id=le.id)
+                    .order_by(LoggedSet.set_number.desc()).first())
+            if not best:
+                continue
+            value = best.actual_reps if best.actual_reps is not None else best.actual_seconds
+            if value is None:
+                continue
+            session = db.session.get(WorkoutSession, session_id)
+            per_exercise[ex.name].append((session.date, value, ex.unit))
+            seen_sessions[ex.id].add(session_id)
+
+        trend_lines = []
+        for ex_name, entries in per_exercise.items():
+            entries.sort(key=lambda x: x[0])  # by date ascending
+            last3 = entries[-3:]
+            if len(last3) >= 2:
+                unit = last3[0][2]
+                trail = ' → '.join(f"{v}{'s' if unit == 'seconds' else ''}" for _, v, _ in last3)
+                trend_lines.append(f"  - {ex_name}: {trail}")
+        if trend_lines:
+            lines.append("- AMRAP trends:")
+            lines.extend(trend_lines)
+
         parts.append('\n'.join(lines))
 
     # ── NUTRITION ──
