@@ -93,23 +93,47 @@ def build_coach_context(user_id: int) -> str:
     except ImportError:
         pass
 
-    last_cali_session = (WorkoutSession.query
-                         .filter_by(user_id=user_id, status='completed', module='calisthenics')
-                         .order_by(WorkoutSession.date.desc())
-                         .first())
-    if last_cali_session:
-        parts.append(f"\n### Last Calisthenics Workout ({last_cali_session.date.isoformat()})")
-        for le in last_cali_session.logged_exercises:
-            ex = db.session.get(Exercise, le.exercise_id)
-            unit = (ex.unit if ex else 'reps')
-            sets_text_parts = []
-            for s in le.logged_sets:
-                if unit == 'seconds' and s.actual_seconds is not None:
-                    sets_text_parts.append(f"{s.actual_seconds}s")
-                elif s.actual_reps is not None:
-                    sets_text_parts.append(f"{s.actual_reps}r")
-            ex_name = ex.name if ex else (le.exercise.name if le.exercise else '?')
-            parts.append(f"- {ex_name}: {', '.join(sets_text_parts) or 'no sets'}")
+    # 30-day calisthenics activity summary (replaces "last session")
+    from app.modules.training.models import Workout as _Workout
+    since = date.today() - timedelta(days=30)
+    cali_sessions = (WorkoutSession.query
+                     .filter(WorkoutSession.user_id == user_id,
+                             WorkoutSession.module == 'calisthenics',
+                             WorkoutSession.status == 'completed',
+                             WorkoutSession.date >= since)
+                     .all())
+    if not cali_sessions:
+        parts.append("\n## Calisthenics Activity\nNo recent calisthenics sessions.")
+    else:
+        main_count = sum(1 for s in cali_sessions if s.kind == 'main')
+        mini_count = sum(1 for s in cali_sessions if s.kind == 'mini')
+        mini_by_kind = {}
+        for s in cali_sessions:
+            if s.kind == 'mini' and s.workout_id:
+                w = db.session.get(_Workout, s.workout_id)
+                if w and w.mini_kind:
+                    mini_by_kind[w.mini_kind] = mini_by_kind.get(w.mini_kind, 0) + 1
+        mini_breakdown = ', '.join(f"{count} {k}" for k, count in sorted(mini_by_kind.items()))
+
+        chain_counts = {}
+        for s in cali_sessions:
+            if s.kind == 'main' and s.workout_id:
+                w = db.session.get(_Workout, s.workout_id)
+                if w:
+                    for we in w.workout_exercises:
+                        ex_obj = db.session.get(Exercise, we.exercise_id)
+                        if ex_obj and ex_obj.progression_chain:
+                            chain_counts[ex_obj.progression_chain] = chain_counts.get(ex_obj.progression_chain, 0) + 1
+        chain_str = ', '.join(f"{c} {cnt}" for c, cnt in sorted(chain_counts.items(), key=lambda kv: -kv[1]))
+
+        lines = [f"\n## Calisthenics Activity (last 30 days)"]
+        sessions_line = f"- {len(cali_sessions)} sessions: {main_count} main, {mini_count} mini"
+        if mini_breakdown:
+            sessions_line += f" ({mini_breakdown})"
+        lines.append(sessions_line)
+        if chain_str:
+            lines.append(f"- Main by chain: {chain_str}")
+        parts.append('\n'.join(lines))
 
     # ── NUTRITION ──
     try:
