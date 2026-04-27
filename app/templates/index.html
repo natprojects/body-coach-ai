@@ -1015,6 +1015,7 @@ const S = {
   calisthenicsToday: null,
   calisthenicsWeekOverview: null,
   calisthenicsCompletedCount: 0,
+  calisthenicsWeeklyStats: null,
   calisthenicsActiveSession: null,
 };
 
@@ -2047,14 +2048,16 @@ async function loadCalisthenicsMode() {
 
 
 async function caliReloadProgramData() {
-  const [todayR, overviewR] = await Promise.all([
+  const [todayR, overviewR, statsR] = await Promise.all([
     api('GET', '/api/calisthenics/today'),
     api('GET', '/api/training/week-overview'),
+    api('GET', '/api/calisthenics/stats/weekly'),
   ]);
   S.calisthenicsToday = (todayR && todayR.success) ? todayR.data : null;
   S.calisthenicsWeekOverview = (overviewR && overviewR.success) ? overviewR.data : null;
   S.calisthenicsCompletedCount = ((overviewR && overviewR.data && overviewR.data.workouts) || [])
     .filter(w => w.status === 'done').length;
+  S.calisthenicsWeeklyStats = (statsR && statsR.success) ? statsR.data : null;
 }
 
 function renderCalisthenicsWizard() {
@@ -2343,6 +2346,17 @@ function renderCalisthenicsHome() {
   }
 
   // STATE B — active program
+  const ws = S.calisthenicsWeeklyStats;
+  const showMini = ws && ws.mini_target > 0;
+  const weeklyCard = ws ? `
+    <div class="hero-card" style="margin-bottom:14px">
+      <div class="hero-label">Цього тижня</div>
+      <div class="hero-stats">
+        <div class="stat"><span class="stat-value">${ws.main_done}/${ws.main_target}</span><span class="stat-label">Основних</span></div>
+        ${showMini ? `<div class="stat"><span class="stat-value">${ws.mini_done}/${ws.mini_target}</span><span class="stat-label">Міні</span></div>` : ''}
+      </div>
+    </div>` : '';
+
   let todayCard = '';
   if (today && today.rest_day) {
     todayCard = `
@@ -2392,7 +2406,7 @@ function renderCalisthenicsHome() {
       }).join('')}
     </div>` : '';
 
-  el.innerHTML = `${endOfBlockBanner}${todayCard}${overviewCard}${lastAssessBlock}`;
+  el.innerHTML = `${endOfBlockBanner}${weeklyCard}${todayCard}${overviewCard}${lastAssessBlock}`;
 }
 
 
