@@ -677,6 +677,81 @@ def get_weekly_stats():
     }})
 
 
+@bp.route('/calisthenics/sessions/history', methods=['GET'])
+@require_auth
+def get_sessions_history():
+    limit = min(int(request.args.get('limit', 30) or 30), 100)
+    sessions = (WorkoutSession.query
+                .filter(WorkoutSession.user_id == g.user_id,
+                        WorkoutSession.module == 'calisthenics',
+                        WorkoutSession.status == 'completed')
+                .order_by(WorkoutSession.date.desc(), WorkoutSession.id.desc())
+                .limit(limit)
+                .all())
+
+    out = []
+    for s in sessions:
+        workout = db.session.get(Workout, s.workout_id) if s.workout_id else None
+        ex_count = (WorkoutExercise.query.filter_by(workout_id=workout.id).count()
+                    if workout else 0)
+        out.append({
+            'id': s.id,
+            'date': s.date.isoformat() if s.date else None,
+            'kind': s.kind,
+            'workout_name': workout.name if workout else 'Видалене тренування',
+            'mini_kind': workout.mini_kind if workout else None,
+            'exercise_count': ex_count,
+            'duration_min': workout.estimated_duration_min if workout else None,
+        })
+    return jsonify({'success': True, 'data': out})
+
+
+@bp.route('/calisthenics/sessions/<int:session_id>/detail', methods=['GET'])
+@require_auth
+def get_session_detail(session_id):
+    from app.modules.training.models import LoggedExercise, LoggedSet
+    session = WorkoutSession.query.filter_by(
+        id=session_id, user_id=g.user_id, module='calisthenics'
+    ).first()
+    if not session:
+        return jsonify({'success': False, 'error': {
+            'code': 'SESSION_NOT_FOUND', 'message': 'Session not found',
+        }}), 404
+
+    workout = db.session.get(Workout, session.workout_id) if session.workout_id else None
+
+    logged_exercises = (LoggedExercise.query
+                        .filter_by(session_id=session.id)
+                        .order_by(LoggedExercise.order_index)
+                        .all())
+    exercises = []
+    for le in logged_exercises:
+        ex = db.session.get(Exercise, le.exercise_id)
+        sets = (LoggedSet.query
+                .filter_by(logged_exercise_id=le.id)
+                .order_by(LoggedSet.set_number)
+                .all())
+        exercises.append({
+            'exercise_name': ex.name if ex else '?',
+            'unit': ex.unit if ex else None,
+            'logged_sets': [{
+                'set_number': s.set_number,
+                'actual_reps': s.actual_reps,
+                'actual_seconds': s.actual_seconds,
+            } for s in sets],
+        })
+
+    return jsonify({'success': True, 'data': {
+        'id': session.id,
+        'date': session.date.isoformat() if session.date else None,
+        'kind': session.kind,
+        'status': session.status,
+        'workout_name': workout.name if workout else 'Видалене тренування',
+        'mini_kind': workout.mini_kind if workout else None,
+        'exercises': exercises,
+    }})
+
+
 @bp.route('/calisthenics/mini-session/generate', methods=['POST'])
 @require_auth
 def post_generate_mini_session():

@@ -109,3 +109,104 @@ def test_weekly_stats_no_profile_returns_zero_targets(app, client, db):
 def test_weekly_stats_requires_auth(app, client):
     r = client.get('/api/calisthenics/stats/weekly')
     assert r.status_code == 401
+
+
+def test_history_returns_recent_sessions(app, client, db):
+    user, _ = _make_user(db, telegram_id=70210)
+    today = date.today()
+    p = Program(user_id=user.id, name='C', periodization_type='hypertrophy',
+                total_weeks=4, status='active', module='calisthenics')
+    db.session.add(p); db.session.flush()
+    m = Mesocycle(program_id=p.id, name='m', order_index=0, weeks_count=1)
+    db.session.add(m); db.session.flush()
+    w = ProgramWeek(mesocycle_id=m.id, week_number=1)
+    db.session.add(w); db.session.flush()
+    main_w = Workout(program_week_id=w.id, day_of_week=0, name='Push A', order_index=0)
+    db.session.add(main_w); db.session.flush()
+
+    db.session.add(WorkoutSession(user_id=user.id, workout_id=main_w.id, module='calisthenics',
+                                   status='completed', date=today - timedelta(days=2), kind='main'))
+    mini_w = Workout(program_week_id=None, mini_kind='stretch', day_of_week=0,
+                     name='10хв стретч', order_index=0)
+    db.session.add(mini_w); db.session.flush()
+    db.session.add(WorkoutSession(user_id=user.id, workout_id=mini_w.id, module='calisthenics',
+                                   status='completed', date=today, kind='mini'))
+    db.session.commit()
+
+    r = client.get('/api/calisthenics/sessions/history', headers=_h(app, user.id))
+    assert r.status_code == 200
+    data = r.get_json()['data']
+    assert len(data) == 2
+    assert data[0]['kind'] == 'mini'
+    assert data[0]['workout_name'] == '10хв стретч'
+    assert data[1]['kind'] == 'main'
+
+
+def test_history_limit_param(app, client, db):
+    user, _ = _make_user(db, telegram_id=70211)
+    today = date.today()
+    for i in range(5):
+        db.session.add(WorkoutSession(
+            user_id=user.id, module='calisthenics', status='completed',
+            date=today - timedelta(days=i), kind='main',
+        ))
+    db.session.commit()
+    r = client.get('/api/calisthenics/sessions/history?limit=3', headers=_h(app, user.id))
+    assert len(r.get_json()['data']) == 3
+
+
+def test_session_detail_returns_logged_sets(app, client, db):
+    from app.modules.training.models import LoggedExercise, LoggedSet
+    user, _ = _make_user(db, telegram_id=70212)
+    today = date.today()
+    p = Program(user_id=user.id, name='C', periodization_type='hypertrophy',
+                total_weeks=4, status='active', module='calisthenics')
+    db.session.add(p); db.session.flush()
+    m = Mesocycle(program_id=p.id, name='m', order_index=0, weeks_count=1)
+    db.session.add(m); db.session.flush()
+    w = ProgramWeek(mesocycle_id=m.id, week_number=1)
+    db.session.add(w); db.session.flush()
+    workout = Workout(program_week_id=w.id, day_of_week=0, name='Push A', order_index=0)
+    db.session.add(workout); db.session.flush()
+    pushup = Exercise.query.filter_by(module='calisthenics', name='full pushup').first()
+    we = WorkoutExercise(workout_id=workout.id, exercise_id=pushup.id, order_index=0)
+    db.session.add(we); db.session.commit()
+
+    s = WorkoutSession(user_id=user.id, workout_id=workout.id, module='calisthenics',
+                       status='completed', date=today, kind='main')
+    db.session.add(s); db.session.flush()
+    le = LoggedExercise(session_id=s.id, exercise_id=pushup.id, order_index=0)
+    db.session.add(le); db.session.flush()
+    db.session.add(LoggedSet(logged_exercise_id=le.id, set_number=1, actual_reps=10))
+    db.session.add(LoggedSet(logged_exercise_id=le.id, set_number=2, actual_reps=12))
+    db.session.commit()
+
+    r = client.get(f'/api/calisthenics/sessions/{s.id}/detail', headers=_h(app, user.id))
+    assert r.status_code == 200
+    data = r.get_json()['data']
+    assert data['workout_name'] == 'Push A'
+    assert data['kind'] == 'main'
+    assert len(data['exercises']) == 1
+    assert data['exercises'][0]['exercise_name'] == 'full pushup'
+    assert len(data['exercises'][0]['logged_sets']) == 2
+    assert data['exercises'][0]['logged_sets'][0]['actual_reps'] == 10
+
+
+def test_session_detail_404_for_other_user(app, client, db):
+    user1, _ = _make_user(db, telegram_id=70213)
+    user2, _ = _make_user(db, telegram_id=70214)
+    s = WorkoutSession(user_id=user1.id, module='calisthenics',
+                       status='completed', date=date.today(), kind='main')
+    db.session.add(s); db.session.commit()
+    r = client.get(f'/api/calisthenics/sessions/{s.id}/detail', headers=_h(app, user2.id))
+    assert r.status_code == 404
+
+
+def test_history_requires_auth(app, client):
+    r = client.get('/api/calisthenics/sessions/history')
+    assert r.status_code == 401
+
+
+def test_session_detail_requires_auth(app, client):
+    r = client.get('/api/calisthenics/sessions/1/detail')
+    assert r.status_code == 401
