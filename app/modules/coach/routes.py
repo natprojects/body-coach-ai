@@ -144,21 +144,27 @@ def thread_chat(thread_id):
 
     def generate():
         full_response = []
-        with get_client().messages.stream(
-            model='claude-sonnet-4-6',
-            max_tokens=2048,
-            system=system,
-            messages=messages,
-        ) as stream:
-            for text in stream.text_stream:
-                full_response.append(text)
-                yield f"data: {text.replace(chr(10), ' ')}\n\n"
+        try:
+            with get_client().messages.stream(
+                model='claude-sonnet-4-6',
+                max_tokens=2048,
+                system=system,
+                messages=messages,
+            ) as stream:
+                for text in stream.text_stream:
+                    full_response.append(text)
+                    yield f"data: {text.replace(chr(10), ' ')}\n\n"
+        except Exception as e:
+            err = f"⚠️ {type(e).__name__}: {str(e)[:300]}"
+            full_response.append(err)
+            yield f"data: {err.replace(chr(10), ' ')}\n\n"
 
         ai_content = ''.join(full_response)
-        ai_msg = ChatMessage(thread_id=thread_id, role='assistant', content=ai_content)
-        db.session.add(ai_msg)
-        thread.updated_at = datetime.utcnow()
-        db.session.commit()
+        if ai_content:
+            ai_msg = ChatMessage(thread_id=thread_id, role='assistant', content=ai_content)
+            db.session.add(ai_msg)
+            thread.updated_at = datetime.utcnow()
+            db.session.commit()
 
         yield 'data: [DONE]\n\n'
 
