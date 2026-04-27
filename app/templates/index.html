@@ -3397,14 +3397,9 @@ function _renderCoachMessages() {
 async function sendCoachMessage() {
   const input = document.getElementById('coach-input');
   const msg = (input.value || '').trim();
-  if (!msg) {
-    alert('DEBUG: empty message');
-    return;
-  }
-  if (S.coachStreaming) {
-    alert('DEBUG: already streaming, please wait');
-    return;
-  }
+  alert('DEBUG: msg.len=' + msg.length + ' streaming=' + S.coachStreaming + ' thread=' + (S.activeThread ? S.activeThread.id : 'NULL'));
+  if (!msg) return;
+  if (S.coachStreaming) return;
   // Defensive: if state was lost (e.g., WebApp reloaded), recover
   if (!S.activeThread) {
     S.activeThread = {id: null, title: 'Нова розмова', messages: []};
