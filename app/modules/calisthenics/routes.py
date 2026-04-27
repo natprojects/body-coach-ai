@@ -21,6 +21,7 @@ def _profile_to_dict(profile: CalisthenicsProfile) -> dict:
         'session_duration_min': profile.session_duration_min,
         'injuries':             profile.injuries or [],
         'motivation':           profile.motivation,
+        'optional_target_per_week': profile.optional_target_per_week or 0,
     }
 
 
@@ -89,6 +90,13 @@ def set_calisthenics_profile():
             'message': f"motivation must be one of: {', '.join(sorted(_VALID_MOTIVATION))}",
         }}), 400
 
+    optional_target = data.get('optional_target_per_week', 0)
+    if not isinstance(optional_target, int) or isinstance(optional_target, bool) or not (0 <= optional_target <= 7):
+        return jsonify({'success': False, 'error': {
+            'code': 'INVALID_FIELD',
+            'message': 'optional_target_per_week must be an integer between 0 and 7',
+        }}), 400
+
     profile = CalisthenicsProfile.query.filter_by(user_id=g.user_id).first()
     is_new = profile is None
     if is_new:
@@ -99,6 +107,7 @@ def set_calisthenics_profile():
     profile.session_duration_min = session_duration_min
     profile.injuries = injuries
     profile.motivation = motivation
+    profile.optional_target_per_week = optional_target
     if is_new:
         db.session.add(profile)
     db.session.commit()
