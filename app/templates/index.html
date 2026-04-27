@@ -3397,7 +3397,6 @@ function _renderCoachMessages() {
 async function sendCoachMessage() {
   const input = document.getElementById('coach-input');
   const msg = (input.value || '').trim();
-  alert('DEBUG: msg.len=' + msg.length + ' streaming=' + S.coachStreaming + ' thread=' + (S.activeThread ? S.activeThread.id : 'NULL'));
   if (!msg) return;
   if (S.coachStreaming) return;
   // Defensive: if state was lost (e.g., WebApp reloaded), recover
@@ -3408,7 +3407,10 @@ async function sendCoachMessage() {
   // Create thread lazily on first message
   if (!S.activeThread.id) {
     const cr = await api('POST', '/api/coach/threads');
-    if (!cr.success) return;
+    if (!cr || !cr.success) {
+      alert('DEBUG thread create failed: ' + JSON.stringify(cr).slice(0, 300));
+      return;
+    }
     S.activeThread.id = cr.data.thread_id;
   }
 
