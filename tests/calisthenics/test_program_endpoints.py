@@ -395,20 +395,66 @@ def test_regenerate_requires_auth(app, client):
     assert r.status_code == 401
 
 
+SAMPLE_EXTENSION_WORKOUTS = [
+    {"day_of_week": 2, "name": "Pull B", "order_index": 1,
+     "target_muscle_groups": "Back", "estimated_duration_min": 35,
+     "warmup_notes": "...", "exercises": [{
+         "exercise_name": "australian pullup", "order_index": 0,
+         "tempo": "3-1-2-0", "is_mandatory": True, "coaching_notes": "...",
+         "sets": [
+             {"set_number": 1, "target_reps": "8-12", "target_seconds": None,
+              "target_rpe": 7.0, "rest_seconds": 90, "is_amrap": False},
+             {"set_number": 2, "target_reps": "8-12", "target_seconds": None,
+              "target_rpe": 8.0, "rest_seconds": 90, "is_amrap": False},
+             {"set_number": 3, "target_reps": "8-12", "target_seconds": None,
+              "target_rpe": 9.0, "rest_seconds": 90, "is_amrap": True},
+         ]}]},
+]
+
+
+@patch('app.modules.calisthenics.coach.generate_program_extension',
+       return_value=SAMPLE_EXTENSION_WORKOUTS)
 @patch('app.modules.calisthenics.routes.generate_calisthenics_program', return_value=SAMPLE)
-def test_regenerate_updates_days_per_week(mock_gen, app, client, db):
+def test_regenerate_updates_days_per_week(mock_gen, mock_ext, app, client, db):
     user = _make_user(db, telegram_id=94010)
     r1 = client.post('/api/calisthenics/program/generate', headers=_h(app, user.id))
     p1_id = r1.get_json()['data']['id']
 
     r2 = client.post(f'/api/calisthenics/program/{p1_id}/regenerate',
-                     json={'days_per_week': 5, 'optional_target_per_week': 2},
+                     json={'days_per_week': 2, 'optional_target_per_week': 2},
                      headers=_h(app, user.id))
     assert r2.status_code == 200
 
     profile = CalisthenicsProfile.query.filter_by(user_id=user.id).first()
-    assert profile.days_per_week == 5
+    assert profile.days_per_week == 2
     assert profile.optional_target_per_week == 2
+
+
+@patch('app.modules.calisthenics.coach.generate_program_extension',
+       return_value=SAMPLE_EXTENSION_WORKOUTS)
+@patch('app.modules.calisthenics.routes.generate_calisthenics_program', return_value=SAMPLE)
+def test_regenerate_extends_when_days_increase(mock_gen, mock_ext, app, client, db):
+    """If new days_per_week > old, append workouts instead of full regen."""
+    user = _make_user(db, telegram_id=94013)
+    r1 = client.post('/api/calisthenics/program/generate', headers=_h(app, user.id))
+    p1_id = r1.get_json()['data']['id']
+    workouts_before = (Workout.query.join(ProgramWeek).join(Mesocycle)
+                       .filter(Mesocycle.program_id == p1_id).count())
+
+    r2 = client.post(f'/api/calisthenics/program/{p1_id}/regenerate',
+                     json={'days_per_week': 5},
+                     headers=_h(app, user.id))
+    assert r2.status_code == 200
+    assert r2.get_json().get('mode') == 'extended'
+    # Same program id, MORE workouts now
+    p_after = db.session.get(Program, p1_id)
+    assert p_after.status == 'active'
+    workouts_after = (Workout.query.join(ProgramWeek).join(Mesocycle)
+                      .filter(Mesocycle.program_id == p1_id).count())
+    assert workouts_after > workouts_before
+    # Full regen mock NOT called
+    assert mock_gen.call_count == 1  # only the initial generate
+    assert mock_ext.called
 
 
 @patch('app.modules.calisthenics.routes.generate_calisthenics_program', return_value=SAMPLE)
