@@ -15,6 +15,7 @@ class CalisthenicsProfile(db.Model):
     injuries             = db.Column(db.JSON)
     motivation           = db.Column(db.String(50))
     # 'look' | 'feel' | 'achieve' | 'health'
+    optional_target_per_week = db.Column(db.Integer, default=0, nullable=False, server_default='0')
     updated_at           = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
