@@ -2407,12 +2407,13 @@ function renderCalisthenicsHome() {
       + МІНІ-СЕСІЯ
     </button>`;
 
-  const historyLink = program ? `
-    <div style="text-align:center;margin-top:8px">
-      <button class="btn btn-ghost" onclick="openCalisthenicsHistory()">Історія тренувань</button>
+  const footerLinks = program ? `
+    <div style="display:flex;gap:8px;justify-content:center;margin-top:8px">
+      <button class="btn btn-ghost" style="width:auto;flex:1" onclick="openCalisthenicsHistory()">Історія</button>
+      <button class="btn btn-ghost" style="width:auto;flex:1" onclick="openScheduleEditor()">Розклад</button>
     </div>` : '';
 
-  el.innerHTML = `${endOfBlockBanner}${weeklyCard}${todayCard}${miniBtn}${overviewCard}${lastAssessBlock}${historyLink}`;
+  el.innerHTML = `${endOfBlockBanner}${weeklyCard}${todayCard}${miniBtn}${overviewCard}${lastAssessBlock}${footerLinks}`;
 }
 
 
