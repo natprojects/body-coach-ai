@@ -392,3 +392,103 @@ def generate_calisthenics_insights(program, user, profile, last_assessment) -> i
 
     db.session.commit()
     return len(insights)
+
+
+def generate_program_extension(user, profile: CalisthenicsProfile,
+                                last_assessment: CalisthenicsAssessment,
+                                existing_workouts: list, additional_days: int) -> list:
+    """Generate ONLY the additional workouts to extend an existing program.
+    existing_workouts: list of dicts {name, day_of_week, chains: [..]}.
+    Returns list of new workout dicts (same shape as workouts in generate_calisthenics_program output)."""
+    catalog = _calisthenics_exercise_catalog()
+    days = profile.days_per_week or 3
+    duration = profile.session_duration_min or 45
+
+    busy_dows = sorted({w['day_of_week'] for w in existing_workouts})
+    used_chain_combos = [w.get('chains', []) for w in existing_workouts]
+
+    system_prompt = f"""You are an expert calisthenics coach.
+Extend an existing weekly program by generating {additional_days} ADDITIONAL workouts.
+Return ONLY JSON array of workout objects — no prose, no markdown.
+
+Existing workouts (DO NOT regenerate, DO NOT include in output):
+{json.dumps(existing_workouts, ensure_ascii=False)}
+
+CONSTRAINTS:
+- Output exactly {additional_days} workout objects in a JSON array
+- Each new workout MUST use a day_of_week NOT in {busy_dows} (Mon=0..Sun=6)
+- Try to balance chain coverage — if existing days hit push 1x and pull 1x, new ones can do push B / pull B variations or core / lunge focus
+- 4-6 exercises per workout, exactly 3 sets each, last set is_amrap: true
+- order_index for new workouts should start at {len(existing_workouts)}
+
+CLOSED EXERCISE LIST:
+{json.dumps(catalog, ensure_ascii=False)}
+
+Workout JSON shape:
+{{"day_of_week":2,"name":"Pull B","order_index":3,"target_muscle_groups":"...","estimated_duration_min":{duration},"warmup_notes":"...","exercises":[{{"exercise_name":"...","order_index":0,"tempo":"3-1-2-0","is_mandatory":true,"coaching_notes":"...","sets":[{{"set_number":1,"target_reps":"8-12","target_seconds":null,"target_rpe":7.0,"rest_seconds":90,"is_amrap":false}},{{"set_number":2,"target_reps":"8-12","target_seconds":null,"target_rpe":8.0,"rest_seconds":90,"is_amrap":false}},{{"set_number":3,"target_reps":"8-12","target_seconds":null,"target_rpe":9.0,"rest_seconds":90,"is_amrap":true}}]}}]}}"""
+
+    user_prompt = f"""User: {user.name}, level: {user.level}, equipment: {profile.equipment}, injuries: {profile.injuries}
+Last assessment: pushups={last_assessment.pushups}, pullups={last_assessment.pullups}, squats={last_assessment.squats}, plank={last_assessment.plank}s
+
+Generate {additional_days} new workout objects as a JSON array. Use day_of_week from {[d for d in range(7) if d not in busy_dows]}."""
+
+    raw = complete(system_prompt=system_prompt, user_message=user_prompt,
+                   max_tokens=4096, model='claude-sonnet-4-6')
+    raw = re.sub(r'^```(?:json)?\s*', '', raw.strip())
+    raw = re.sub(r'\s*```$', '', raw).strip()
+    try:
+        result = json.loads(raw)
+        if not isinstance(result, list):
+            raise ValueError("expected JSON array")
+        return result
+    except (json.JSONDecodeError, ValueError) as e:
+        raise ValueError(f"AI returned invalid extension JSON: {e}")
+
+
+def extend_program_with_workouts(program: Program, new_workouts: list) -> int:
+    """Add new workouts to the existing program's first week. Returns count added."""
+    week = (ProgramWeek.query.join(Mesocycle)
+            .filter(Mesocycle.program_id == program.id).first())
+    if not week:
+        raise ValueError("Program has no week to extend")
+
+    added = 0
+    for wo_dict in new_workouts:
+        workout = Workout(
+            program_week_id=week.id,
+            day_of_week=wo_dict['day_of_week'],
+            name=wo_dict['name'],
+            order_index=wo_dict.get('order_index', 0),
+            target_muscle_groups=wo_dict.get('target_muscle_groups'),
+            estimated_duration_min=wo_dict.get('estimated_duration_min'),
+            warmup_notes=wo_dict.get('warmup_notes'),
+        )
+        db.session.add(workout)
+        db.session.flush()
+        for ex_dict in wo_dict.get('exercises', []):
+            exercise = _resolve_calisthenics_exercise(ex_dict['exercise_name'])
+            we = WorkoutExercise(
+                workout_id=workout.id,
+                exercise_id=exercise.id,
+                order_index=ex_dict.get('order_index', 0),
+                tempo=ex_dict.get('tempo'),
+                is_mandatory=ex_dict.get('is_mandatory', True),
+                notes=ex_dict.get('coaching_notes') or ex_dict.get('notes'),
+            )
+            db.session.add(we)
+            db.session.flush()
+            for s_dict in ex_dict.get('sets', []):
+                ps = PlannedSet(
+                    workout_exercise_id=we.id,
+                    set_number=s_dict['set_number'],
+                    target_reps=s_dict.get('target_reps'),
+                    target_seconds=s_dict.get('target_seconds'),
+                    target_weight_kg=None,
+                    target_rpe=s_dict.get('target_rpe'),
+                    rest_seconds=s_dict.get('rest_seconds'),
+                    is_amrap=s_dict.get('is_amrap', False),
+                )
+                db.session.add(ps)
+        added += 1
+    db.session.commit()
+    return added

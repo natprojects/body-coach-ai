@@ -584,7 +584,9 @@ def post_regenerate(program_id):
 
     body = request.get_json(silent=True) or {}
 
-    # Optionally update schedule before regenerating
+    # Snapshot the OLD days_per_week before applying the new value — needed for extend decision
+    old_days = profile.days_per_week or 0
+
     if 'days_per_week' in body:
         new_days = body['days_per_week']
         if not isinstance(new_days, int) or isinstance(new_days, bool) or not (1 <= new_days <= 7):
@@ -603,15 +605,43 @@ def post_regenerate(program_id):
         profile.optional_target_per_week = new_opt
     db.session.commit()
 
+    new_days_target = profile.days_per_week or 0
+    can_extend = (new_days_target > old_days
+                  and program.status == 'active'
+                  and old_days >= 1)
+
     try:
-        program_dict = generate_calisthenics_program(user, profile, last_assessment)
-        new_program = save_calisthenics_program_from_dict(g.user_id, program_dict)
+        if can_extend:
+            from .coach import generate_program_extension, extend_program_with_workouts
+            week = (ProgramWeek.query.join(Mesocycle)
+                    .filter(Mesocycle.program_id == program.id).first())
+            existing = []
+            if week:
+                for wo in (Workout.query.filter_by(program_week_id=week.id)
+                           .order_by(Workout.order_index).all()):
+                    chains = []
+                    for we in wo.workout_exercises:
+                        ex = db.session.get(Exercise, we.exercise_id)
+                        if ex and ex.progression_chain and ex.progression_chain not in chains:
+                            chains.append(ex.progression_chain)
+                    existing.append({'name': wo.name, 'day_of_week': wo.day_of_week,
+                                     'order_index': wo.order_index, 'chains': chains})
+            additional = new_days_target - old_days
+            new_workouts = generate_program_extension(
+                user, profile, last_assessment, existing, additional,
+            )
+            extend_program_with_workouts(program, new_workouts)
+            return jsonify({'success': True, 'data': _serialize_program(program),
+                            'mode': 'extended'})
+        else:
+            program_dict = generate_calisthenics_program(user, profile, last_assessment)
+            new_program = save_calisthenics_program_from_dict(g.user_id, program_dict)
+            return jsonify({'success': True, 'data': _serialize_program(new_program),
+                            'mode': 'regenerated'})
     except ValueError as e:
         return jsonify({'success': False, 'error': {
             'code': 'AI_GENERATION_FAILED', 'message': str(e),
         }}), 500
-
-    return jsonify({'success': True, 'data': _serialize_program(new_program)})
 
 
 @bp.route('/calisthenics/program/<int:program_id>/insights', methods=['POST'])
