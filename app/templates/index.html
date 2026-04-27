@@ -331,6 +331,7 @@
       border-radius: 50%; color: #fff; font-size: 17px; cursor: pointer; flex-shrink: 0;
       display: flex; align-items: center; justify-content: center; transition: opacity .15s; }
     .coach-send-btn:disabled { opacity: .35; cursor: default; }
+    .coach-send-btn:active { transform: scale(.92); opacity: .8; }
     /* ── Nutrition ── */
     #panel-nutrition { overflow: hidden; padding: 0; gap: 0; flex-direction: column; }
     #nutrition-setup { display: flex; flex-direction: column; align-items: center;
@@ -3396,7 +3397,14 @@ function _renderCoachMessages() {
 async function sendCoachMessage() {
   const input = document.getElementById('coach-input');
   const msg = (input.value || '').trim();
-  if (!msg || S.coachStreaming) return;
+  if (!msg) {
+    alert('DEBUG: empty message');
+    return;
+  }
+  if (S.coachStreaming) {
+    alert('DEBUG: already streaming, please wait');
+    return;
+  }
   // Defensive: if state was lost (e.g., WebApp reloaded), recover
   if (!S.activeThread) {
     S.activeThread = {id: null, title: 'Нова розмова', messages: []};
@@ -3464,7 +3472,10 @@ async function sendCoachMessage() {
       }
     }
   } catch (e) {
-    aiText = 'Помилка з\'єднання. Спробуй ще раз.';
+    aiText = 'Помилка з\'єднання: ' + (e && e.message ? e.message : String(e));
+  }
+  if (!aiText) {
+    aiText = '⚠️ Сервер не повернув відповіді (можливо API ключ або ліміт). Передивись prod logs.';
   }
 
   // Finalize bubble (remove cursor)
