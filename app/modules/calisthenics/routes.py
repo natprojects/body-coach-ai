@@ -179,6 +179,8 @@ from .coach import (
     generate_calisthenics_program,
     save_calisthenics_program_from_dict,
     generate_calisthenics_insights,
+    generate_mini_session,
+    save_mini_session_from_dict,
 )
 
 
@@ -614,3 +616,82 @@ def post_program_insights(program_id):
         }}), 500
 
     return jsonify({'success': True, 'data': _serialize_program(program)})
+
+
+def _serialize_mini_workout(workout) -> dict:
+    return {
+        'workout_id': workout.id,
+        'name': workout.name,
+        'mini_kind': workout.mini_kind,
+        'estimated_duration_min': workout.estimated_duration_min,
+        'exercises': [{
+            'id': we.id,
+            'exercise_id': we.exercise_id,
+            'exercise_name': db.session.get(Exercise, we.exercise_id).name,
+            'unit': db.session.get(Exercise, we.exercise_id).unit,
+            'order_index': we.order_index,
+            'tempo': we.tempo,
+            'notes': we.notes,
+            'sets': [{
+                'id': ps.id, 'set_number': ps.set_number,
+                'target_reps': ps.target_reps, 'target_seconds': ps.target_seconds,
+                'target_rpe': ps.target_rpe, 'rest_seconds': ps.rest_seconds,
+                'is_amrap': ps.is_amrap,
+            } for ps in PlannedSet.query.filter_by(
+                workout_exercise_id=we.id
+            ).order_by(PlannedSet.set_number).all()],
+        } for we in sorted(workout.workout_exercises, key=lambda x: x.order_index)],
+    }
+
+
+@bp.route('/calisthenics/mini-session/generate', methods=['POST'])
+@require_auth
+def post_generate_mini_session():
+    data = request.get_json(silent=True) or {}
+    mini_type = data.get('type')
+    if mini_type not in ('stretch', 'short', 'skill'):
+        return jsonify({'success': False, 'error': {
+            'code': 'INVALID_TYPE',
+            'message': "type must be one of: stretch, short, skill",
+        }}), 400
+
+    user = db.session.get(User, g.user_id)
+    profile = CalisthenicsProfile.query.filter_by(user_id=g.user_id).first()
+    if not profile:
+        return jsonify({'success': False, 'error': {
+            'code': 'PROFILE_REQUIRED', 'message': 'Complete the profile first',
+        }}), 400
+
+    last_assessment = (CalisthenicsAssessment.query
+                       .filter_by(user_id=g.user_id)
+                       .order_by(CalisthenicsAssessment.assessed_at.desc())
+                       .first())
+    if not last_assessment:
+        return jsonify({'success': False, 'error': {
+            'code': 'ASSESSMENT_REQUIRED', 'message': 'Take the assessment first',
+        }}), 400
+
+    from datetime import date
+    today_chains = []
+    today_sessions = WorkoutSession.query.filter_by(
+        user_id=g.user_id, module='calisthenics', date=date.today(), kind='main'
+    ).all()
+    for s in today_sessions:
+        if s.workout_id:
+            wk = db.session.get(Workout, s.workout_id)
+            if wk:
+                for we in wk.workout_exercises:
+                    ex = db.session.get(Exercise, we.exercise_id)
+                    if ex and ex.progression_chain:
+                        today_chains.append(ex.progression_chain)
+    today_chains = list(set(today_chains))
+
+    try:
+        mini_dict = generate_mini_session(user, profile, last_assessment, mini_type, today_chains)
+        workout = save_mini_session_from_dict(g.user_id, mini_type, mini_dict)
+    except ValueError as e:
+        return jsonify({'success': False, 'error': {
+            'code': 'AI_GENERATION_FAILED', 'message': str(e),
+        }}), 500
+
+    return jsonify({'success': True, 'data': _serialize_mini_workout(workout)})

@@ -90,3 +90,43 @@ def test_save_mini_session_invalid_type_raises(app, db):
     user, _, _ = _make_user(db, telegram_id=80104)
     with pytest.raises(ValueError, match='mini_type'):
         save_mini_session_from_dict(user.id, 'meditation', SAMPLE_STRETCH)
+
+
+@patch('app.modules.calisthenics.routes.generate_mini_session', return_value=SAMPLE_STRETCH)
+def test_generate_mini_creates_workout(mock_gen, app, client, db):
+    user, _, _ = _make_user(db, telegram_id=80110)
+    r = client.post('/api/calisthenics/mini-session/generate',
+                    json={'type': 'stretch'}, headers=_h(app, user.id))
+    assert r.status_code == 200
+    data = r.get_json()['data']
+    assert data['mini_kind'] == 'stretch'
+    assert data['workout_id']
+    workout = db.session.get(Workout, data['workout_id'])
+    assert workout.mini_kind == 'stretch'
+    assert workout.program_week_id is None
+
+
+def test_generate_mini_invalid_type(app, client, db):
+    user, _, _ = _make_user(db, telegram_id=80111)
+    r = client.post('/api/calisthenics/mini-session/generate',
+                    json={'type': 'meditation'}, headers=_h(app, user.id))
+    assert r.status_code == 400
+    assert r.get_json()['error']['code'] == 'INVALID_TYPE'
+
+
+def test_generate_mini_requires_profile(app, client, db):
+    u = User(telegram_id=80112, name='NoProf', gender='female', age=25,
+             weight_kg=60.0, height_cm=165.0, goal_primary='hypertrophy',
+             level='beginner', training_days_per_week=3, session_duration_min=45,
+             equipment=['floor'], onboarding_completed_at=datetime.utcnow(),
+             active_module='calisthenics')
+    db.session.add(u); db.session.commit()
+    r = client.post('/api/calisthenics/mini-session/generate',
+                    json={'type': 'stretch'}, headers=_h(app, u.id))
+    assert r.status_code == 400
+    assert r.get_json()['error']['code'] == 'PROFILE_REQUIRED'
+
+
+def test_generate_mini_requires_auth(app, client):
+    r = client.post('/api/calisthenics/mini-session/generate', json={'type': 'stretch'})
+    assert r.status_code == 401
