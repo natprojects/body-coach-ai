@@ -110,7 +110,7 @@ JSON structure:
 Use day_of_week 0=Mon..6=Sun."""
 
     raw = complete(system_prompt=system_prompt, user_message=user_prompt,
-                   max_tokens=4096, model='claude-sonnet-4-6')
+                   max_tokens=8192, model='claude-sonnet-4-6')
     # Strip markdown code fences that the model sometimes wraps around JSON
     raw = re.sub(r'^```(?:json)?\s*', '', raw.strip())
     raw = re.sub(r'\s*```$', '', raw).strip()
@@ -470,7 +470,7 @@ Last assessment: pushups={last_assessment.pushups}, pullups={last_assessment.pul
 Generate {additional_days} new workout objects as a JSON array. Use day_of_week from {[d for d in range(7) if d not in busy_dows]}."""
 
     raw = complete(system_prompt=system_prompt, user_message=user_prompt,
-                   max_tokens=4096, model='claude-sonnet-4-6')
+                   max_tokens=8192, model='claude-sonnet-4-6')
     raw = re.sub(r'^```(?:json)?\s*', '', raw.strip())
     raw = re.sub(r'\s*```$', '', raw).strip()
     try:
