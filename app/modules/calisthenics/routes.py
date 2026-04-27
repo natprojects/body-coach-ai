@@ -580,6 +580,27 @@ def post_regenerate(program_id):
             'message': 'Take the assessment again before regenerating',
         }}), 400
 
+    body = request.get_json(silent=True) or {}
+
+    # Optionally update schedule before regenerating
+    if 'days_per_week' in body:
+        new_days = body['days_per_week']
+        if not isinstance(new_days, int) or isinstance(new_days, bool) or not (1 <= new_days <= 7):
+            return jsonify({'success': False, 'error': {
+                'code': 'INVALID_FIELD',
+                'message': 'days_per_week must be int 1..7',
+            }}), 400
+        profile.days_per_week = new_days
+    if 'optional_target_per_week' in body:
+        new_opt = body['optional_target_per_week']
+        if not isinstance(new_opt, int) or isinstance(new_opt, bool) or not (0 <= new_opt <= 7):
+            return jsonify({'success': False, 'error': {
+                'code': 'INVALID_FIELD',
+                'message': 'optional_target_per_week must be int 0..7',
+            }}), 400
+        profile.optional_target_per_week = new_opt
+    db.session.commit()
+
     try:
         program_dict = generate_calisthenics_program(user, profile, last_assessment)
         new_program = save_calisthenics_program_from_dict(g.user_id, program_dict)
