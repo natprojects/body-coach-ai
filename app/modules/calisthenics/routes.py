@@ -378,7 +378,7 @@ from .level_up import compute_level_up_suggestions
 @bp.route('/calisthenics/session/start', methods=['POST'])
 @require_auth
 def post_session_start():
-    data = request.json or {}
+    data = request.get_json(silent=True) or {}
     workout_id = data.get('workout_id')
     if not isinstance(workout_id, int):
         return jsonify({'success': False, 'error': {
@@ -391,25 +391,31 @@ def post_session_start():
             'code': 'WORKOUT_NOT_FOUND', 'message': 'Workout not found',
         }}), 404
 
-    # Find program for this workout
-    program = (Program.query
-               .join(Mesocycle).join(ProgramWeek)
-               .filter(ProgramWeek.id == workout.program_week_id)
-               .first())
-    if not program or program.user_id != g.user_id:
-        return jsonify({'success': False, 'error': {
-            'code': 'WORKOUT_NOT_FOUND', 'message': 'Workout not found',
-        }}), 404
-    if program.module != 'calisthenics':
-        return jsonify({'success': False, 'error': {
-            'code': 'MODULE_MISMATCH',
-            'message': 'This workout belongs to a different module',
-        }}), 400
+    if workout.mini_kind:
+        # Mini-session — no program ownership check (mini workouts have program_week_id=NULL)
+        # The user must have a profile (already enforced at /mini-session/generate)
+        pass
+    else:
+        program = (Program.query
+                   .join(Mesocycle).join(ProgramWeek)
+                   .filter(ProgramWeek.id == workout.program_week_id)
+                   .first())
+        if not program or program.user_id != g.user_id:
+            return jsonify({'success': False, 'error': {
+                'code': 'WORKOUT_NOT_FOUND', 'message': 'Workout not found',
+            }}), 404
+        if program.module != 'calisthenics':
+            return jsonify({'success': False, 'error': {
+                'code': 'MODULE_MISMATCH',
+                'message': 'This workout belongs to a different module',
+            }}), 400
 
+    session_kind = 'mini' if workout.mini_kind else 'main'
     session = WorkoutSession(
         user_id=g.user_id, workout_id=workout_id,
         module='calisthenics', status='in_progress',
         date=date.today(),
+        kind=session_kind,
     )
     db.session.add(session)
     db.session.commit()

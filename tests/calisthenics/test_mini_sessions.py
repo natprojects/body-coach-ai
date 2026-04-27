@@ -130,3 +130,19 @@ def test_generate_mini_requires_profile(app, client, db):
 def test_generate_mini_requires_auth(app, client):
     r = client.post('/api/calisthenics/mini-session/generate', json={'type': 'stretch'})
     assert r.status_code == 401
+
+
+@patch('app.modules.calisthenics.routes.generate_mini_session', return_value=SAMPLE_STRETCH)
+def test_session_start_for_mini_workout_sets_kind(mock_gen, app, client, db):
+    user, _, _ = _make_user(db, telegram_id=80115)
+    gen = client.post('/api/calisthenics/mini-session/generate',
+                      json={'type': 'stretch'}, headers=_h(app, user.id))
+    workout_id = gen.get_json()['data']['workout_id']
+    r = client.post('/api/calisthenics/session/start',
+                    json={'workout_id': workout_id}, headers=_h(app, user.id))
+    assert r.status_code == 200
+    sid = r.get_json()['data']['session_id']
+    from app.modules.training.models import WorkoutSession
+    s = db.session.get(WorkoutSession, sid)
+    assert s.kind == 'mini'
+    assert s.module == 'calisthenics'
