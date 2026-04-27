@@ -2407,7 +2407,12 @@ function renderCalisthenicsHome() {
       + МІНІ-СЕСІЯ
     </button>`;
 
-  el.innerHTML = `${endOfBlockBanner}${weeklyCard}${todayCard}${miniBtn}${overviewCard}${lastAssessBlock}`;
+  const historyLink = program ? `
+    <div style="text-align:center;margin-top:8px">
+      <button class="btn btn-ghost" onclick="openCalisthenicsHistory()">Історія тренувань</button>
+    </div>` : '';
+
+  el.innerHTML = `${endOfBlockBanner}${weeklyCard}${todayCard}${miniBtn}${overviewCard}${lastAssessBlock}${historyLink}`;
 }
 
 
@@ -2541,6 +2546,97 @@ async function confirmRegenerate() {
   if (profileR && profileR.success) S.calisthenicsProfile = profileR.data;
   await caliReloadProgramData();
   renderCalisthenicsHome();
+}
+
+
+async function openCalisthenicsHistory() {
+  const overlay = document.createElement('div');
+  overlay.id = 'cali-history-overlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:var(--bg);z-index:1000;display:flex;flex-direction:column;overflow:hidden';
+  overlay.innerHTML = `
+    <div style="display:flex;align-items:center;padding:14px 16px;border-bottom:1px solid var(--border)">
+      <button class="btn btn-ghost" style="width:auto;padding:6px 14px;margin-right:12px" onclick="closeCalisthenicsHistory()">←</button>
+      <div style="font-family:'Barlow Condensed',sans-serif;font-size:18px;font-weight:800;text-transform:uppercase;letter-spacing:.05em">Історія тренувань</div>
+    </div>
+    <div id="cali-history-list" style="flex:1;overflow-y:auto;padding:16px">
+      <div style="color:var(--muted);font-size:13px;text-align:center;padding:20px">Завантаження…</div>
+    </div>`;
+  document.body.appendChild(overlay);
+
+  const r = await api('GET', '/api/calisthenics/sessions/history?limit=30');
+  const list = document.getElementById('cali-history-list');
+  if (!r || !r.success) {
+    list.innerHTML = `<div style="color:var(--muted);text-align:center;padding:20px">Не вдалось завантажити</div>`;
+    return;
+  }
+  if (r.data.length === 0) {
+    list.innerHTML = `<div style="color:var(--muted);text-align:center;padding:40px">Поки що тренувань нема</div>`;
+    return;
+  }
+  list.innerHTML = r.data.map(s => `
+    <div onclick="openCalisthenicsSessionDetail(${s.id})" style="padding:12px 4px;border-bottom:1px solid var(--border);cursor:pointer">
+      <div style="display:flex;justify-content:space-between;align-items:baseline">
+        <div style="font-size:14px;font-weight:600">${_esc(s.workout_name)}</div>
+        <div style="font-size:11px;color:var(--muted)">${s.date}</div>
+      </div>
+      <div style="font-size:11px;color:var(--muted);margin-top:4px">
+        ${s.kind === 'mini' ? `міні · ${s.mini_kind || ''}` : 'основне'} · ${s.exercise_count} вправ
+      </div>
+    </div>`).join('');
+}
+
+
+function closeCalisthenicsHistory() {
+  const o = document.getElementById('cali-history-overlay');
+  if (o) o.remove();
+}
+
+
+async function openCalisthenicsSessionDetail(sessionId) {
+  const overlay = document.createElement('div');
+  overlay.id = 'cali-session-detail-overlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:var(--bg);z-index:1010;display:flex;flex-direction:column;overflow:hidden';
+  overlay.innerHTML = `
+    <div style="display:flex;align-items:center;padding:14px 16px;border-bottom:1px solid var(--border)">
+      <button class="btn btn-ghost" style="width:auto;padding:6px 14px;margin-right:12px" onclick="closeCalisthenicsSessionDetail()">←</button>
+      <div id="cali-detail-title" style="font-family:'Barlow Condensed',sans-serif;font-size:18px;font-weight:800;text-transform:uppercase;letter-spacing:.05em">Сесія</div>
+    </div>
+    <div id="cali-detail-body" style="flex:1;overflow-y:auto;padding:16px">
+      <div style="color:var(--muted);font-size:13px;text-align:center;padding:20px">Завантаження…</div>
+    </div>`;
+  document.body.appendChild(overlay);
+
+  const r = await api('GET', `/api/calisthenics/sessions/${sessionId}/detail`);
+  const body = document.getElementById('cali-detail-body');
+  const title = document.getElementById('cali-detail-title');
+  if (!r || !r.success) {
+    body.innerHTML = `<div style="color:var(--muted);text-align:center;padding:20px">Не вдалось завантажити</div>`;
+    return;
+  }
+  const d = r.data;
+  title.textContent = `${d.workout_name} · ${d.date}`;
+  if (!d.exercises.length) {
+    body.innerHTML = `<div style="color:var(--muted);text-align:center;padding:20px">Сесія без записів підходів</div>`;
+    return;
+  }
+  body.innerHTML = d.exercises.map(ex => {
+    const setsStr = ex.logged_sets.map(s => {
+      if (s.actual_reps != null) return s.actual_reps;
+      if (s.actual_seconds != null) return s.actual_seconds + 'с';
+      return '—';
+    }).join(' / ');
+    return `
+      <div class="hero-card" style="margin-bottom:10px;padding:12px 14px">
+        <div style="font-size:14px;font-weight:600;margin-bottom:4px">${_esc(ex.exercise_name)}</div>
+        <div style="font-size:13px;color:var(--muted)">${setsStr}</div>
+      </div>`;
+  }).join('');
+}
+
+
+function closeCalisthenicsSessionDetail() {
+  const o = document.getElementById('cali-session-detail-overlay');
+  if (o) o.remove();
 }
 
 
