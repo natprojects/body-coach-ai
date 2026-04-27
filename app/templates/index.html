@@ -2751,8 +2751,8 @@ function renderCalisthenicsWorkout() {
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
           <div class="cali-ex-name">${ex.exercise_name}</div>
           <div style="display:flex;gap:6px">
-            <a href="https://youtube.com/results?search_query=${ytQuery}" target="_blank"
-               class="cali-set-btn" style="text-decoration:none;font-size:11px">▶ YouTube</a>
+            <button class="cali-set-btn" style="font-size:11px"
+                    onclick="openYouTubeSearch('${ytQuery}')">▶ YouTube</button>
             <button class="cali-set-btn" style="font-size:11px"
                     onclick="openSwapPicker(${ex.id},${ex.exercise_id})">↻ Замінити</button>
           </div>
@@ -2823,6 +2823,18 @@ async function caliLogAmrapSet(exId, setNumber, isSeconds) {
     sess.logged[exId] = sess.logged[exId] || {};
     sess.logged[exId][setNumber] = v;
     renderCalisthenicsWorkout();
+  }
+}
+
+
+function openYouTubeSearch(query) {
+  const url = `https://youtube.com/results?search_query=${query}`;
+  // Use Telegram WebApp's openLink — opens inside Telegram's in-app browser,
+  // user swipes down to return. Falls back to window.open outside Telegram.
+  if (window.Telegram?.WebApp?.openLink) {
+    window.Telegram.WebApp.openLink(url, {try_instant_view: true});
+  } else {
+    window.open(url, '_blank');
   }
 }
 
