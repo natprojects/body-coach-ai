@@ -2406,7 +2406,68 @@ function renderCalisthenicsHome() {
       }).join('')}
     </div>` : '';
 
-  el.innerHTML = `${endOfBlockBanner}${weeklyCard}${todayCard}${overviewCard}${lastAssessBlock}`;
+  const miniBtn = `
+    <button class="btn btn-ghost" style="margin-bottom:14px" onclick="openMiniSessionPicker()">
+      + МІНІ-СЕСІЯ
+    </button>`;
+
+  el.innerHTML = `${endOfBlockBanner}${weeklyCard}${todayCard}${miniBtn}${overviewCard}${lastAssessBlock}`;
+}
+
+
+function openMiniSessionPicker() {
+  const overlay = document.createElement('div');
+  overlay.id = 'mini-picker-overlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:1000;display:flex;align-items:center;justify-content:center;padding:20px';
+  overlay.innerHTML = `
+    <div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:22px;max-width:340px;width:100%">
+      <div style="font-family:'Barlow Condensed',sans-serif;font-size:18px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;margin-bottom:14px">Обери міні-сесію</div>
+      <button class="btn btn-primary" style="margin-bottom:8px" onclick="generateMiniSession('stretch')">🧘 Стретч 10 хв</button>
+      <button class="btn btn-primary" style="margin-bottom:8px" onclick="generateMiniSession('short')">💪 Скорочена силова 15 хв</button>
+      <button class="btn btn-primary" style="margin-bottom:12px" onclick="generateMiniSession('skill')">🎯 Скіл-фокус 10 хв</button>
+      <button class="btn btn-ghost" onclick="closeMiniSessionPicker()">Закрити</button>
+    </div>`;
+  document.body.appendChild(overlay);
+}
+
+
+function closeMiniSessionPicker() {
+  const o = document.getElementById('mini-picker-overlay');
+  if (o) o.remove();
+}
+
+
+async function generateMiniSession(type) {
+  closeMiniSessionPicker();
+  const el = document.getElementById('train-content');
+  el.innerHTML = `
+    <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:60vh">
+      <div style="width:48px;height:48px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:caliSpin 1s linear infinite;margin-bottom:20px"></div>
+      <div style="font-family:'Barlow Condensed',sans-serif;font-size:18px;text-transform:uppercase;letter-spacing:.05em">Створюю сесію…</div>
+      <div style="font-size:13px;color:var(--muted);margin-top:8px">5-15 секунд</div>
+    </div>`;
+
+  const r = await api('POST', '/api/calisthenics/mini-session/generate', {type}, 600000);
+  if (!r || !r.success) {
+    alert('Не вдалось створити: ' + (r?.error?.message || ''));
+    renderCalisthenicsHome();
+    return;
+  }
+  const workoutId = r.data.workout_id;
+  const startR = await api('POST', '/api/calisthenics/session/start', {workout_id: workoutId});
+  if (!startR || !startR.success) {
+    alert('Не вдалось почати: ' + (startR?.error?.message || ''));
+    renderCalisthenicsHome();
+    return;
+  }
+  S.calisthenicsActiveSession = {
+    session_id: startR.data.session_id,
+    workout: r.data,
+    logged: {},
+  };
+  // renderCalisthenicsWorkout reads workout.id to know what to render — set it
+  S.calisthenicsActiveSession.workout.id = workoutId;
+  renderCalisthenicsWorkout();
 }
 
 
