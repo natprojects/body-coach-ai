@@ -43,8 +43,10 @@ class ProgramWeek(db.Model):
 class Workout(db.Model):
     __tablename__ = 'workouts'
     id = db.Column(db.Integer, primary_key=True)
-    program_week_id = db.Column(db.Integer, db.ForeignKey('program_weeks.id'), nullable=False)
-    day_of_week = db.Column(db.Integer, nullable=False)  # 0=Mon ... 6=Sun
+    program_week_id = db.Column(db.Integer, db.ForeignKey('program_weeks.id'), nullable=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+    mini_kind = db.Column(db.String(20))  # 'stretch' | 'short' | 'skill' for mini-sessions; NULL for main
+    day_of_week = db.Column(db.Integer, nullable=False)
     name = db.Column(db.String(200), nullable=False)
     order_index = db.Column(db.Integer, nullable=False)
     target_muscle_groups = db.Column(db.String(200))
@@ -122,6 +124,7 @@ class WorkoutSession(db.Model):
     cycle_adapted = db.Column(db.Boolean, default=False)
     last_exercise_id = db.Column(db.Integer, db.ForeignKey('exercises.id'), nullable=True)
     module = db.Column(db.String(20), default='gym', nullable=False, server_default='gym')
+    kind = db.Column(db.String(20), default='main', nullable=False, server_default='main')  # 'main' | 'mini'
 
     logged_exercises = db.relationship('LoggedExercise', backref='session',
                                        order_by='LoggedExercise.order_index',

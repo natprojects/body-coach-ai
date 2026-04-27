@@ -21,6 +21,7 @@ def _profile_to_dict(profile: CalisthenicsProfile) -> dict:
         'session_duration_min': profile.session_duration_min,
         'injuries':             profile.injuries or [],
         'motivation':           profile.motivation,
+        'optional_target_per_week': profile.optional_target_per_week or 0,
     }
 
 
@@ -89,6 +90,13 @@ def set_calisthenics_profile():
             'message': f"motivation must be one of: {', '.join(sorted(_VALID_MOTIVATION))}",
         }}), 400
 
+    optional_target = data.get('optional_target_per_week', 0)
+    if not isinstance(optional_target, int) or isinstance(optional_target, bool) or not (0 <= optional_target <= 7):
+        return jsonify({'success': False, 'error': {
+            'code': 'INVALID_FIELD',
+            'message': 'optional_target_per_week must be an integer between 0 and 7',
+        }}), 400
+
     profile = CalisthenicsProfile.query.filter_by(user_id=g.user_id).first()
     is_new = profile is None
     if is_new:
@@ -99,6 +107,7 @@ def set_calisthenics_profile():
     profile.session_duration_min = session_duration_min
     profile.injuries = injuries
     profile.motivation = motivation
+    profile.optional_target_per_week = optional_target
     if is_new:
         db.session.add(profile)
     db.session.commit()
@@ -170,6 +179,8 @@ from .coach import (
     generate_calisthenics_program,
     save_calisthenics_program_from_dict,
     generate_calisthenics_insights,
+    generate_mini_session,
+    save_mini_session_from_dict,
 )
 
 
@@ -367,7 +378,7 @@ from .level_up import compute_level_up_suggestions
 @bp.route('/calisthenics/session/start', methods=['POST'])
 @require_auth
 def post_session_start():
-    data = request.json or {}
+    data = request.get_json(silent=True) or {}
     workout_id = data.get('workout_id')
     if not isinstance(workout_id, int):
         return jsonify({'success': False, 'error': {
@@ -380,25 +391,33 @@ def post_session_start():
             'code': 'WORKOUT_NOT_FOUND', 'message': 'Workout not found',
         }}), 404
 
-    # Find program for this workout
-    program = (Program.query
-               .join(Mesocycle).join(ProgramWeek)
-               .filter(ProgramWeek.id == workout.program_week_id)
-               .first())
-    if not program or program.user_id != g.user_id:
-        return jsonify({'success': False, 'error': {
-            'code': 'WORKOUT_NOT_FOUND', 'message': 'Workout not found',
-        }}), 404
-    if program.module != 'calisthenics':
-        return jsonify({'success': False, 'error': {
-            'code': 'MODULE_MISMATCH',
-            'message': 'This workout belongs to a different module',
-        }}), 400
+    if workout.mini_kind:
+        # Mini-session — verify ownership directly via Workout.user_id
+        if workout.user_id != g.user_id:
+            return jsonify({'success': False, 'error': {
+                'code': 'WORKOUT_NOT_FOUND', 'message': 'Workout not found',
+            }}), 404
+    else:
+        program = (Program.query
+                   .join(Mesocycle).join(ProgramWeek)
+                   .filter(ProgramWeek.id == workout.program_week_id)
+                   .first())
+        if not program or program.user_id != g.user_id:
+            return jsonify({'success': False, 'error': {
+                'code': 'WORKOUT_NOT_FOUND', 'message': 'Workout not found',
+            }}), 404
+        if program.module != 'calisthenics':
+            return jsonify({'success': False, 'error': {
+                'code': 'MODULE_MISMATCH',
+                'message': 'This workout belongs to a different module',
+            }}), 400
 
+    session_kind = 'mini' if workout.mini_kind else 'main'
     session = WorkoutSession(
         user_id=g.user_id, workout_id=workout_id,
         module='calisthenics', status='in_progress',
         date=date.today(),
+        kind=session_kind,
     )
     db.session.add(session)
     db.session.commit()
@@ -563,6 +582,27 @@ def post_regenerate(program_id):
             'message': 'Take the assessment again before regenerating',
         }}), 400
 
+    body = request.get_json(silent=True) or {}
+
+    # Optionally update schedule before regenerating
+    if 'days_per_week' in body:
+        new_days = body['days_per_week']
+        if not isinstance(new_days, int) or isinstance(new_days, bool) or not (1 <= new_days <= 7):
+            return jsonify({'success': False, 'error': {
+                'code': 'INVALID_FIELD',
+                'message': 'days_per_week must be int 1..7',
+            }}), 400
+        profile.days_per_week = new_days
+    if 'optional_target_per_week' in body:
+        new_opt = body['optional_target_per_week']
+        if not isinstance(new_opt, int) or isinstance(new_opt, bool) or not (0 <= new_opt <= 7):
+            return jsonify({'success': False, 'error': {
+                'code': 'INVALID_FIELD',
+                'message': 'optional_target_per_week must be int 0..7',
+            }}), 400
+        profile.optional_target_per_week = new_opt
+    db.session.commit()
+
     try:
         program_dict = generate_calisthenics_program(user, profile, last_assessment)
         new_program = save_calisthenics_program_from_dict(g.user_id, program_dict)
@@ -605,3 +645,184 @@ def post_program_insights(program_id):
         }}), 500
 
     return jsonify({'success': True, 'data': _serialize_program(program)})
+
+
+def _serialize_mini_workout(workout) -> dict:
+    return {
+        'workout_id': workout.id,
+        'name': workout.name,
+        'mini_kind': workout.mini_kind,
+        'estimated_duration_min': workout.estimated_duration_min,
+        'exercises': [{
+            'id': we.id,
+            'exercise_id': we.exercise_id,
+            'exercise_name': db.session.get(Exercise, we.exercise_id).name,
+            'unit': db.session.get(Exercise, we.exercise_id).unit,
+            'order_index': we.order_index,
+            'tempo': we.tempo,
+            'notes': we.notes,
+            'sets': [{
+                'id': ps.id, 'set_number': ps.set_number,
+                'target_reps': ps.target_reps, 'target_seconds': ps.target_seconds,
+                'target_rpe': ps.target_rpe, 'rest_seconds': ps.rest_seconds,
+                'is_amrap': ps.is_amrap,
+            } for ps in PlannedSet.query.filter_by(
+                workout_exercise_id=we.id
+            ).order_by(PlannedSet.set_number).all()],
+        } for we in sorted(workout.workout_exercises, key=lambda x: x.order_index)],
+    }
+
+
+@bp.route('/calisthenics/stats/weekly', methods=['GET'])
+@require_auth
+def get_weekly_stats():
+    from datetime import date, timedelta
+    today = date.today()
+    monday = today - timedelta(days=today.weekday())
+
+    profile = CalisthenicsProfile.query.filter_by(user_id=g.user_id).first()
+    main_target = profile.days_per_week if profile else 0
+    mini_target = profile.optional_target_per_week if profile else 0
+
+    sessions = WorkoutSession.query.filter(
+        WorkoutSession.user_id == g.user_id,
+        WorkoutSession.module == 'calisthenics',
+        WorkoutSession.status == 'completed',
+        WorkoutSession.date >= monday,
+    ).all()
+    main_done = sum(1 for s in sessions if s.kind == 'main')
+    mini_done = sum(1 for s in sessions if s.kind == 'mini')
+
+    return jsonify({'success': True, 'data': {
+        'week_start': monday.isoformat(),
+        'main_done': main_done, 'main_target': main_target,
+        'mini_done': mini_done, 'mini_target': mini_target,
+    }})
+
+
+@bp.route('/calisthenics/sessions/history', methods=['GET'])
+@require_auth
+def get_sessions_history():
+    limit = min(int(request.args.get('limit', 30) or 30), 100)
+    sessions = (WorkoutSession.query
+                .filter(WorkoutSession.user_id == g.user_id,
+                        WorkoutSession.module == 'calisthenics',
+                        WorkoutSession.status == 'completed')
+                .order_by(WorkoutSession.date.desc(), WorkoutSession.id.desc())
+                .limit(limit)
+                .all())
+
+    out = []
+    for s in sessions:
+        workout = db.session.get(Workout, s.workout_id) if s.workout_id else None
+        ex_count = (WorkoutExercise.query.filter_by(workout_id=workout.id).count()
+                    if workout else 0)
+        out.append({
+            'id': s.id,
+            'date': s.date.isoformat() if s.date else None,
+            'kind': s.kind,
+            'workout_name': workout.name if workout else 'Видалене тренування',
+            'mini_kind': workout.mini_kind if workout else None,
+            'exercise_count': ex_count,
+            'duration_min': workout.estimated_duration_min if workout else None,
+        })
+    return jsonify({'success': True, 'data': out})
+
+
+@bp.route('/calisthenics/sessions/<int:session_id>/detail', methods=['GET'])
+@require_auth
+def get_session_detail(session_id):
+    from app.modules.training.models import LoggedExercise, LoggedSet
+    session = WorkoutSession.query.filter_by(
+        id=session_id, user_id=g.user_id, module='calisthenics'
+    ).first()
+    if not session:
+        return jsonify({'success': False, 'error': {
+            'code': 'SESSION_NOT_FOUND', 'message': 'Session not found',
+        }}), 404
+
+    workout = db.session.get(Workout, session.workout_id) if session.workout_id else None
+
+    logged_exercises = (LoggedExercise.query
+                        .filter_by(session_id=session.id)
+                        .order_by(LoggedExercise.order_index)
+                        .all())
+    exercises = []
+    for le in logged_exercises:
+        ex = db.session.get(Exercise, le.exercise_id)
+        sets = (LoggedSet.query
+                .filter_by(logged_exercise_id=le.id)
+                .order_by(LoggedSet.set_number)
+                .all())
+        exercises.append({
+            'exercise_name': ex.name if ex else '?',
+            'unit': ex.unit if ex else None,
+            'logged_sets': [{
+                'set_number': s.set_number,
+                'actual_reps': s.actual_reps,
+                'actual_seconds': s.actual_seconds,
+            } for s in sets],
+        })
+
+    return jsonify({'success': True, 'data': {
+        'id': session.id,
+        'date': session.date.isoformat() if session.date else None,
+        'kind': session.kind,
+        'status': session.status,
+        'workout_name': workout.name if workout else 'Видалене тренування',
+        'mini_kind': workout.mini_kind if workout else None,
+        'exercises': exercises,
+    }})
+
+
+@bp.route('/calisthenics/mini-session/generate', methods=['POST'])
+@require_auth
+def post_generate_mini_session():
+    data = request.get_json(silent=True) or {}
+    mini_type = data.get('type')
+    if mini_type not in ('stretch', 'short', 'skill'):
+        return jsonify({'success': False, 'error': {
+            'code': 'INVALID_TYPE',
+            'message': "type must be one of: stretch, short, skill",
+        }}), 400
+
+    user = db.session.get(User, g.user_id)
+    profile = CalisthenicsProfile.query.filter_by(user_id=g.user_id).first()
+    if not profile:
+        return jsonify({'success': False, 'error': {
+            'code': 'PROFILE_REQUIRED', 'message': 'Complete the profile first',
+        }}), 400
+
+    last_assessment = (CalisthenicsAssessment.query
+                       .filter_by(user_id=g.user_id)
+                       .order_by(CalisthenicsAssessment.assessed_at.desc())
+                       .first())
+    if not last_assessment:
+        return jsonify({'success': False, 'error': {
+            'code': 'ASSESSMENT_REQUIRED', 'message': 'Take the assessment first',
+        }}), 400
+
+    from datetime import date
+    today_chains = []
+    today_sessions = WorkoutSession.query.filter_by(
+        user_id=g.user_id, module='calisthenics', date=date.today(), kind='main'
+    ).all()
+    for s in today_sessions:
+        if s.workout_id:
+            wk = db.session.get(Workout, s.workout_id)
+            if wk:
+                for we in wk.workout_exercises:
+                    ex = db.session.get(Exercise, we.exercise_id)
+                    if ex and ex.progression_chain:
+                        today_chains.append(ex.progression_chain)
+    today_chains = list(set(today_chains))
+
+    try:
+        mini_dict = generate_mini_session(user, profile, last_assessment, mini_type, today_chains)
+        workout = save_mini_session_from_dict(g.user_id, mini_type, mini_dict)
+    except ValueError as e:
+        return jsonify({'success': False, 'error': {
+            'code': 'AI_GENERATION_FAILED', 'message': str(e),
+        }}), 500
+
+    return jsonify({'success': True, 'data': _serialize_mini_workout(workout)})

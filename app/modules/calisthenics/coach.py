@@ -186,6 +186,132 @@ def save_calisthenics_program_from_dict(user_id: int, program_dict: dict) -> Pro
     return program
 
 
+_VALID_MINI_TYPES = {'stretch', 'short', 'skill'}
+
+
+def save_mini_session_from_dict(user_id: int, mini_type: str, mini_dict: dict) -> Workout:
+    """Persist an AI-generated mini-session as a Workout row with program_week_id=NULL.
+    Reuses existing WorkoutExercise/PlannedSet hierarchy so logging is identical to main."""
+    if mini_type not in _VALID_MINI_TYPES:
+        raise ValueError(f"Invalid mini_type: {mini_type!r}")
+
+    workout = Workout(
+        program_week_id=None,
+        mini_kind=mini_type,
+        user_id=user_id,  # ownership for mini-workouts
+        day_of_week=0,
+        name=mini_dict.get('name', f'{mini_type} session'),
+        order_index=0,
+        estimated_duration_min=mini_dict.get('estimated_duration_min'),
+        warmup_notes=mini_dict.get('warmup_notes'),
+    )
+    db.session.add(workout)
+    db.session.flush()
+
+    for ex_dict in mini_dict.get('exercises', []):
+        exercise = _resolve_calisthenics_exercise(ex_dict['exercise_name'])
+        we = WorkoutExercise(
+            workout_id=workout.id,
+            exercise_id=exercise.id,
+            order_index=ex_dict.get('order_index', 0),
+            tempo=ex_dict.get('tempo'),
+            is_mandatory=ex_dict.get('is_mandatory', True),
+            notes=ex_dict.get('coaching_notes') or ex_dict.get('notes'),
+        )
+        db.session.add(we)
+        db.session.flush()
+
+        for s_dict in ex_dict.get('sets', []):
+            ps = PlannedSet(
+                workout_exercise_id=we.id,
+                set_number=s_dict['set_number'],
+                target_reps=s_dict.get('target_reps'),
+                target_seconds=s_dict.get('target_seconds'),
+                target_weight_kg=None,
+                target_rpe=s_dict.get('target_rpe'),
+                rest_seconds=s_dict.get('rest_seconds'),
+                is_amrap=s_dict.get('is_amrap', False),
+            )
+            db.session.add(ps)
+
+    db.session.commit()
+    return workout
+
+
+_MINI_PROMPTS = {
+    'stretch': {
+        'duration_min': 10,
+        'guidance': (
+            "Generate a 10-minute mobility / stretch session with 5-7 exercises, "
+            "30-60 seconds each. Target: hips, shoulders, spine, posture. "
+            "All exercises are seconds-based (target_seconds set, target_reps null). "
+            "No AMRAP. Anchor selections to user's injuries (avoid aggravating positions)."
+        ),
+    },
+    'short': {
+        'duration_min': 15,
+        'guidance': (
+            "Generate a 15-minute compact strength session with 3-4 exercises, "
+            "2 sets each. The LAST set of each exercise has is_amrap: true. "
+            "Use exercise levels matching the user's main program — don't push harder. "
+            "Avoid duplicating chains the user already trained today (a comma-separated list "
+            "of recently used chains is provided as 'today_main_chains')."
+        ),
+    },
+    'skill': {
+        'duration_min': 10,
+        'guidance': (
+            "Generate a 10-minute skill-focus session with 1-2 specific skill progressions. "
+            "Examples: L-sit holds, handstand wall holds, planche leans, dragon flag negatives. "
+            "Focus on form/quality, low volume (3-4 sets × 5-15s holds OR 3 reps with 60-90s rest). "
+            "Pick a skill the user is close to but hasn't fully mastered, looking at their assessment."
+        ),
+    },
+}
+
+
+def generate_mini_session(user, profile: CalisthenicsProfile,
+                          last_assessment: CalisthenicsAssessment, mini_type: str,
+                          today_main_chains: list = None) -> dict:
+    """Call Claude to generate a mini-session of the given type. Returns parsed JSON dict."""
+    if mini_type not in _VALID_MINI_TYPES:
+        raise ValueError(f"Invalid mini_type: {mini_type!r}")
+
+    config = _MINI_PROMPTS[mini_type]
+    catalog = _calisthenics_exercise_catalog()
+
+    system_prompt = f"""You are an expert calisthenics coach.
+Generate a calisthenics MINI-SESSION as compact JSON only — no prose, no markdown, just valid JSON.
+
+{config['guidance']}
+
+CLOSED EXERCISE LIST (use ONLY these names, exactly as written):
+{json.dumps(catalog, ensure_ascii=False)}
+
+INJURIES from profile: {profile.injuries or []}
+GOALS: {profile.goals or []}
+
+JSON shape (compact):
+{{"name":"...","estimated_duration_min":{config['duration_min']},"warmup_notes":"...","exercises":[{{"exercise_name":"...","order_index":0,"tempo":"...","is_mandatory":true,"coaching_notes":"...","sets":[{{"set_number":1,"target_reps":"8-12","target_seconds":null,"target_rpe":7.0,"rest_seconds":60,"is_amrap":false}}]}}]}}"""
+
+    user_prompt = f"""User: {user.name}, level: {user.level}, equipment: {profile.equipment}
+Last assessment: pushups={last_assessment.pushups}, pullups={last_assessment.pullups}, squats={last_assessment.squats}, plank={last_assessment.plank}s, hollow={last_assessment.hollow_body}s
+today_main_chains: {today_main_chains or []}
+
+Return only the JSON object."""
+
+    response = complete(
+        system_prompt=system_prompt, user_message=user_prompt,
+        max_tokens=2048, model='claude-sonnet-4-6',
+    )
+    response = re.sub(r'^```(?:json)?\s*', '', response.strip())
+    response = re.sub(r'\s*```$', '', response).strip()
+    try:
+        return json.loads(response)
+    except json.JSONDecodeError as e:
+        raise ValueError(f"AI returned invalid JSON for mini-session: {e}")
+
+
 def generate_calisthenics_insights(program, user, profile, last_assessment) -> int:
     """Generate selection_reason + expected_outcome for every WorkoutExercise in a calisthenics
     program. Returns count of exercises updated."""

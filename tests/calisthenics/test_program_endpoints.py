@@ -393,3 +393,46 @@ def test_regenerate_requires_assessment(app, client, db):
 def test_regenerate_requires_auth(app, client):
     r = client.post('/api/calisthenics/program/1/regenerate')
     assert r.status_code == 401
+
+
+@patch('app.modules.calisthenics.routes.generate_calisthenics_program', return_value=SAMPLE)
+def test_regenerate_updates_days_per_week(mock_gen, app, client, db):
+    user = _make_user(db, telegram_id=94010)
+    r1 = client.post('/api/calisthenics/program/generate', headers=_h(app, user.id))
+    p1_id = r1.get_json()['data']['id']
+
+    r2 = client.post(f'/api/calisthenics/program/{p1_id}/regenerate',
+                     json={'days_per_week': 5, 'optional_target_per_week': 2},
+                     headers=_h(app, user.id))
+    assert r2.status_code == 200
+
+    profile = CalisthenicsProfile.query.filter_by(user_id=user.id).first()
+    assert profile.days_per_week == 5
+    assert profile.optional_target_per_week == 2
+
+
+@patch('app.modules.calisthenics.routes.generate_calisthenics_program', return_value=SAMPLE)
+def test_regenerate_invalid_days(mock_gen, app, client, db):
+    user = _make_user(db, telegram_id=94011)
+    r1 = client.post('/api/calisthenics/program/generate', headers=_h(app, user.id))
+    p1_id = r1.get_json()['data']['id']
+    r2 = client.post(f'/api/calisthenics/program/{p1_id}/regenerate',
+                     json={'days_per_week': 9},
+                     headers=_h(app, user.id))
+    assert r2.status_code == 400
+    assert r2.get_json()['error']['code'] == 'INVALID_FIELD'
+
+
+@patch('app.modules.calisthenics.routes.generate_calisthenics_program', return_value=SAMPLE)
+def test_regenerate_works_without_params(mock_gen, app, client, db):
+    user = _make_user(db, telegram_id=94012)
+    r1 = client.post('/api/calisthenics/program/generate', headers=_h(app, user.id))
+    p1_id = r1.get_json()['data']['id']
+    profile_before = CalisthenicsProfile.query.filter_by(user_id=user.id).first()
+    days_before = profile_before.days_per_week
+
+    r2 = client.post(f'/api/calisthenics/program/{p1_id}/regenerate', json={},
+                     headers=_h(app, user.id))
+    assert r2.status_code == 200
+    profile_after = CalisthenicsProfile.query.filter_by(user_id=user.id).first()
+    assert profile_after.days_per_week == days_before

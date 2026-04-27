@@ -320,3 +320,42 @@ def test_post_assessment_requires_auth(app, client, db):
 def test_get_assessment_history_requires_auth(app, client, db):
     r = client.get('/api/calisthenics/assessment/history')
     assert r.status_code == 401
+
+
+def test_post_profile_accepts_optional_target(app, client, db):
+    user = _make_user(db, telegram_id=70080)
+    body = {
+        'goals': ['muscle'], 'equipment': ['floor'],
+        'days_per_week': 4, 'session_duration_min': 45,
+        'injuries': [], 'motivation': 'look',
+        'optional_target_per_week': 2,
+    }
+    r = client.post('/api/calisthenics/profile', json=body, headers=_h(app, user.id))
+    assert r.status_code == 200
+    data = r.get_json()['data']
+    assert data['optional_target_per_week'] == 2
+
+
+def test_post_profile_default_optional_target_zero(app, client, db):
+    user = _make_user(db, telegram_id=70081)
+    body = {
+        'goals': ['muscle'], 'equipment': ['floor'],
+        'days_per_week': 4, 'session_duration_min': 45,
+        'injuries': [], 'motivation': 'look',
+    }
+    r = client.post('/api/calisthenics/profile', json=body, headers=_h(app, user.id))
+    assert r.status_code == 200
+    assert r.get_json()['data']['optional_target_per_week'] == 0
+
+
+def test_post_profile_invalid_optional_target(app, client, db):
+    user = _make_user(db, telegram_id=70082)
+    body = {
+        'goals': ['muscle'], 'equipment': ['floor'],
+        'days_per_week': 4, 'session_duration_min': 45,
+        'injuries': [], 'motivation': 'look',
+        'optional_target_per_week': 8,
+    }
+    r = client.post('/api/calisthenics/profile', json=body, headers=_h(app, user.id))
+    assert r.status_code == 400
+    assert r.get_json()['error']['code'] == 'INVALID_FIELD'

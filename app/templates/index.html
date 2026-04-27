@@ -1015,6 +1015,7 @@ const S = {
   calisthenicsToday: null,
   calisthenicsWeekOverview: null,
   calisthenicsCompletedCount: 0,
+  calisthenicsWeeklyStats: null,
   calisthenicsActiveSession: null,
 };
 
@@ -1998,7 +1999,7 @@ async function switchTab(name) {
 }
 
 // ── CALISTHENICS ──
-const _caliSetupData = { goals: [], equipment: [], days_per_week: null, session_duration_min: null, injuries: [], motivation: null };
+const _caliSetupData = { goals: [], equipment: [], days_per_week: null, session_duration_min: null, injuries: [], motivation: null, optional_target_per_week: 0 };
 let _caliSetupStep = 1;
 
 async function switchModule(mode) {
@@ -2047,20 +2048,22 @@ async function loadCalisthenicsMode() {
 
 
 async function caliReloadProgramData() {
-  const [todayR, overviewR] = await Promise.all([
+  const [todayR, overviewR, statsR] = await Promise.all([
     api('GET', '/api/calisthenics/today'),
     api('GET', '/api/training/week-overview'),
+    api('GET', '/api/calisthenics/stats/weekly'),
   ]);
   S.calisthenicsToday = (todayR && todayR.success) ? todayR.data : null;
   S.calisthenicsWeekOverview = (overviewR && overviewR.success) ? overviewR.data : null;
   S.calisthenicsCompletedCount = ((overviewR && overviewR.data && overviewR.data.workouts) || [])
     .filter(w => w.status === 'done').length;
+  S.calisthenicsWeeklyStats = (statsR && statsR.success) ? statsR.data : null;
 }
 
 function renderCalisthenicsWizard() {
   const el = document.getElementById('train-content');
   _caliSetupStep = 1;
-  Object.assign(_caliSetupData, { goals: [], equipment: [], days_per_week: 4, session_duration_min: 45, injuries: [], motivation: null });
+  Object.assign(_caliSetupData, { goals: [], equipment: [], days_per_week: 4, session_duration_min: 45, injuries: [], motivation: null, optional_target_per_week: 0 });
   el.innerHTML = `
     <div class="cali-setup">
       <div class="cali-setup-step active" id="cali-step-1">
@@ -2092,6 +2095,12 @@ function renderCalisthenicsWizard() {
         <div class="cali-chip-group">
           ${[[30,'30хв'],[45,'45хв'],[60,'60хв'],[90,'90хв']].map(([v,l]) =>
             `<button class="cali-chip" onclick="caliSelectDuration(this,${v})">${l}</button>`
+          ).join('')}
+        </div>
+        <div class="cali-setup-title" style="margin-top:20px">Опціональних міні-сесій?</div>
+        <div class="cali-chip-group">
+          ${[0,1,2,3,4].map(n =>
+            `<button class="cali-chip" onclick="caliSelectOptional(this,${n})">${n}</button>`
           ).join('')}
         </div>
         <button class="cali-next-btn" onclick="caliNextStep(3)">Далі →</button>
@@ -2141,6 +2150,12 @@ function caliSelectDuration(btn, val) {
   btn.closest('.cali-chip-group').querySelectorAll('.cali-chip').forEach(b => b.classList.remove('selected'));
   btn.classList.add('selected');
   _caliSetupData.session_duration_min = val;
+}
+
+function caliSelectOptional(btn, val) {
+  btn.closest('.cali-chip-group').querySelectorAll('.cali-chip').forEach(b => b.classList.remove('selected'));
+  btn.classList.add('selected');
+  _caliSetupData.optional_target_per_week = val;
 }
 
 function caliToggleInjury(btn, val) {
@@ -2254,13 +2269,9 @@ async function caliSubmitAssessment() {
   if (r.success) {
     S.calisthenicsLastAssessment = r.data;
     if (S.calisthenicsProgram) {
-      if (confirm('Зберегти результати. Створити новий блок програми?')) {
-        const programId = S.calisthenicsProgram.id;
-        const regen = await api('POST', `/api/calisthenics/program/${programId}/regenerate`, null, 600000);
-        if (regen.success) {
-          S.calisthenicsProgram = regen.data;
-          await caliReloadProgramData();
-        }
+      if (confirm('Створити новий блок програми зі свіжими результатами?')) {
+        openScheduleEditor();
+        return;
       }
     }
     renderCalisthenicsHome();
@@ -2301,8 +2312,8 @@ function renderCalisthenicsHome() {
       endOfBlockBanner = `
         <div class="no-program-card" style="background:rgba(245,158,11,.12);border-color:rgba(245,158,11,.4)">
           <div class="np-title">🏆 Блок завершено!</div>
-          <div class="np-body">Пройди тест щоб виміряти прогрес → новий блок</div>
-          <button class="btn btn-primary" onclick="renderCalisthenicsAssessment()">Пройти тест</button>
+          <div class="np-body">Час оновити програму під свіжі результати</div>
+          <button class="btn btn-primary" onclick="openScheduleEditor()">Перегенерувати</button>
         </div>`;
     }
   }
@@ -2331,6 +2342,17 @@ function renderCalisthenicsHome() {
   }
 
   // STATE B — active program
+  const ws = S.calisthenicsWeeklyStats;
+  const showMini = ws && ws.mini_target > 0;
+  const weeklyCard = ws ? `
+    <div class="hero-card" style="margin-bottom:14px">
+      <div class="hero-label">Цього тижня</div>
+      <div class="hero-stats">
+        <div class="stat"><span class="stat-value">${ws.main_done}/${ws.main_target}</span><span class="stat-label">Основних</span></div>
+        ${showMini ? `<div class="stat"><span class="stat-value">${ws.mini_done}/${ws.mini_target}</span><span class="stat-label">Міні</span></div>` : ''}
+      </div>
+    </div>` : '';
+
   let todayCard = '';
   if (today && today.rest_day) {
     todayCard = `
@@ -2380,7 +2402,241 @@ function renderCalisthenicsHome() {
       }).join('')}
     </div>` : '';
 
-  el.innerHTML = `${endOfBlockBanner}${todayCard}${overviewCard}${lastAssessBlock}`;
+  const miniBtn = `
+    <button class="btn btn-ghost" style="margin-bottom:14px" onclick="openMiniSessionPicker()">
+      + МІНІ-СЕСІЯ
+    </button>`;
+
+  const historyLink = program ? `
+    <div style="text-align:center;margin-top:8px">
+      <button class="btn btn-ghost" onclick="openCalisthenicsHistory()">Історія тренувань</button>
+    </div>` : '';
+
+  el.innerHTML = `${endOfBlockBanner}${weeklyCard}${todayCard}${miniBtn}${overviewCard}${lastAssessBlock}${historyLink}`;
+}
+
+
+function openMiniSessionPicker() {
+  const overlay = document.createElement('div');
+  overlay.id = 'mini-picker-overlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:1000;display:flex;align-items:center;justify-content:center;padding:20px';
+  overlay.innerHTML = `
+    <div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:22px;max-width:340px;width:100%">
+      <div style="font-family:'Barlow Condensed',sans-serif;font-size:18px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;margin-bottom:14px">Обери міні-сесію</div>
+      <button class="btn btn-primary" style="margin-bottom:8px" onclick="generateMiniSession('stretch')">🧘 Стретч 10 хв</button>
+      <button class="btn btn-primary" style="margin-bottom:8px" onclick="generateMiniSession('short')">💪 Скорочена силова 15 хв</button>
+      <button class="btn btn-primary" style="margin-bottom:12px" onclick="generateMiniSession('skill')">🎯 Скіл-фокус 10 хв</button>
+      <button class="btn btn-ghost" onclick="closeMiniSessionPicker()">Закрити</button>
+    </div>`;
+  document.body.appendChild(overlay);
+}
+
+
+function closeMiniSessionPicker() {
+  const o = document.getElementById('mini-picker-overlay');
+  if (o) o.remove();
+}
+
+
+async function generateMiniSession(type) {
+  closeMiniSessionPicker();
+  const el = document.getElementById('train-content');
+  el.innerHTML = `
+    <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:60vh">
+      <div style="width:48px;height:48px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:caliSpin 1s linear infinite;margin-bottom:20px"></div>
+      <div style="font-family:'Barlow Condensed',sans-serif;font-size:18px;text-transform:uppercase;letter-spacing:.05em">Створюю сесію…</div>
+      <div style="font-size:13px;color:var(--muted);margin-top:8px">5-15 секунд</div>
+    </div>`;
+
+  const r = await api('POST', '/api/calisthenics/mini-session/generate', {type}, 600000);
+  if (!r || !r.success) {
+    alert('Не вдалось створити: ' + (r?.error?.message || ''));
+    renderCalisthenicsHome();
+    return;
+  }
+  const workoutId = r.data.workout_id;
+  const startR = await api('POST', '/api/calisthenics/session/start', {workout_id: workoutId});
+  if (!startR || !startR.success) {
+    alert('Не вдалось почати: ' + (startR?.error?.message || ''));
+    renderCalisthenicsHome();
+    return;
+  }
+  S.calisthenicsActiveSession = {
+    session_id: startR.data.session_id,
+    workout: r.data,
+    logged: {},
+  };
+  // renderCalisthenicsWorkout reads workout.id to know what to render — set it
+  S.calisthenicsActiveSession.workout.id = workoutId;
+  renderCalisthenicsWorkout();
+}
+
+
+function openScheduleEditor() {
+  const profile = S.calisthenicsProfile || {};
+  const currentDays = profile.days_per_week || 4;
+  const currentOpt = profile.optional_target_per_week || 0;
+  S._schedPicked = {days: currentDays, opt: currentOpt};
+
+  const overlay = document.createElement('div');
+  overlay.id = 'schedule-editor-overlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:1000;display:flex;align-items:center;justify-content:center;padding:20px';
+  overlay.innerHTML = `
+    <div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:22px;max-width:360px;width:100%">
+      <div style="font-family:'Barlow Condensed',sans-serif;font-size:18px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;margin-bottom:14px">Розклад нової програми</div>
+      <div style="font-size:13px;color:var(--muted);margin-bottom:8px">Скільки днів на тиждень?</div>
+      <div class="cali-chip-group" id="sched-days-row" style="margin-bottom:14px">
+        ${[2,3,4,5,6].map(d => `<button class="cali-chip ${d === currentDays ? 'selected' : ''}" onclick="schedPickDays(this,${d})">${d}</button>`).join('')}
+      </div>
+      <div style="font-size:13px;color:var(--muted);margin-bottom:8px">Опціональних міні-сесій?</div>
+      <div class="cali-chip-group" id="sched-opt-row" style="margin-bottom:18px">
+        ${[0,1,2,3,4].map(n => `<button class="cali-chip ${n === currentOpt ? 'selected' : ''}" onclick="schedPickOpt(this,${n})">${n}</button>`).join('')}
+      </div>
+      <button class="btn btn-primary" style="margin-bottom:8px" onclick="confirmRegenerate()">Створити нову програму</button>
+      <button class="btn btn-ghost" onclick="closeScheduleEditor()">Скасувати</button>
+    </div>`;
+  document.body.appendChild(overlay);
+}
+
+
+function closeScheduleEditor() {
+  const o = document.getElementById('schedule-editor-overlay');
+  if (o) o.remove();
+  S._schedPicked = null;
+}
+
+
+function schedPickDays(btn, val) {
+  btn.closest('.cali-chip-group').querySelectorAll('.cali-chip').forEach(b => b.classList.remove('selected'));
+  btn.classList.add('selected');
+  if (S._schedPicked) S._schedPicked.days = val;
+}
+
+
+function schedPickOpt(btn, val) {
+  btn.closest('.cali-chip-group').querySelectorAll('.cali-chip').forEach(b => b.classList.remove('selected'));
+  btn.classList.add('selected');
+  if (S._schedPicked) S._schedPicked.opt = val;
+}
+
+
+async function confirmRegenerate() {
+  if (!S.calisthenicsProgram || !S._schedPicked) return;
+  const pid = S.calisthenicsProgram.id;
+  const body = {
+    days_per_week: S._schedPicked.days,
+    optional_target_per_week: S._schedPicked.opt,
+  };
+  closeScheduleEditor();
+  const el = document.getElementById('train-content');
+  el.innerHTML = `
+    <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:60vh">
+      <div style="width:48px;height:48px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:caliSpin 1s linear infinite;margin-bottom:20px"></div>
+      <div style="font-family:'Barlow Condensed',sans-serif;font-size:18px;text-transform:uppercase;letter-spacing:.05em">Створюю нову програму…</div>
+    </div>`;
+  const r = await api('POST', `/api/calisthenics/program/${pid}/regenerate`, body, 600000);
+  if (!r || !r.success) {
+    alert('Не вдалось: ' + (r?.error?.message || ''));
+    renderCalisthenicsHome();
+    return;
+  }
+  S.calisthenicsProgram = r.data;
+  // Reload profile too since days_per_week changed
+  const profileR = await api('GET', '/api/calisthenics/profile');
+  if (profileR && profileR.success) S.calisthenicsProfile = profileR.data;
+  await caliReloadProgramData();
+  renderCalisthenicsHome();
+}
+
+
+async function openCalisthenicsHistory() {
+  const overlay = document.createElement('div');
+  overlay.id = 'cali-history-overlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:var(--bg);z-index:1000;display:flex;flex-direction:column;overflow:hidden';
+  overlay.innerHTML = `
+    <div style="display:flex;align-items:center;padding:14px 16px;border-bottom:1px solid var(--border)">
+      <button class="btn btn-ghost" style="width:auto;padding:6px 14px;margin-right:12px" onclick="closeCalisthenicsHistory()">←</button>
+      <div style="font-family:'Barlow Condensed',sans-serif;font-size:18px;font-weight:800;text-transform:uppercase;letter-spacing:.05em">Історія тренувань</div>
+    </div>
+    <div id="cali-history-list" style="flex:1;overflow-y:auto;padding:16px">
+      <div style="color:var(--muted);font-size:13px;text-align:center;padding:20px">Завантаження…</div>
+    </div>`;
+  document.body.appendChild(overlay);
+
+  const r = await api('GET', '/api/calisthenics/sessions/history?limit=30');
+  const list = document.getElementById('cali-history-list');
+  if (!r || !r.success) {
+    list.innerHTML = `<div style="color:var(--muted);text-align:center;padding:20px">Не вдалось завантажити</div>`;
+    return;
+  }
+  if (r.data.length === 0) {
+    list.innerHTML = `<div style="color:var(--muted);text-align:center;padding:40px">Поки що тренувань нема</div>`;
+    return;
+  }
+  list.innerHTML = r.data.map(s => `
+    <div onclick="openCalisthenicsSessionDetail(${s.id})" style="padding:12px 4px;border-bottom:1px solid var(--border);cursor:pointer">
+      <div style="display:flex;justify-content:space-between;align-items:baseline">
+        <div style="font-size:14px;font-weight:600">${_esc(s.workout_name)}</div>
+        <div style="font-size:11px;color:var(--muted)">${s.date}</div>
+      </div>
+      <div style="font-size:11px;color:var(--muted);margin-top:4px">
+        ${s.kind === 'mini' ? `міні · ${s.mini_kind || ''}` : 'основне'} · ${s.exercise_count} вправ
+      </div>
+    </div>`).join('');
+}
+
+
+function closeCalisthenicsHistory() {
+  const o = document.getElementById('cali-history-overlay');
+  if (o) o.remove();
+}
+
+
+async function openCalisthenicsSessionDetail(sessionId) {
+  const overlay = document.createElement('div');
+  overlay.id = 'cali-session-detail-overlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:var(--bg);z-index:1010;display:flex;flex-direction:column;overflow:hidden';
+  overlay.innerHTML = `
+    <div style="display:flex;align-items:center;padding:14px 16px;border-bottom:1px solid var(--border)">
+      <button class="btn btn-ghost" style="width:auto;padding:6px 14px;margin-right:12px" onclick="closeCalisthenicsSessionDetail()">←</button>
+      <div id="cali-detail-title" style="font-family:'Barlow Condensed',sans-serif;font-size:18px;font-weight:800;text-transform:uppercase;letter-spacing:.05em">Сесія</div>
+    </div>
+    <div id="cali-detail-body" style="flex:1;overflow-y:auto;padding:16px">
+      <div style="color:var(--muted);font-size:13px;text-align:center;padding:20px">Завантаження…</div>
+    </div>`;
+  document.body.appendChild(overlay);
+
+  const r = await api('GET', `/api/calisthenics/sessions/${sessionId}/detail`);
+  const body = document.getElementById('cali-detail-body');
+  const title = document.getElementById('cali-detail-title');
+  if (!r || !r.success) {
+    body.innerHTML = `<div style="color:var(--muted);text-align:center;padding:20px">Не вдалось завантажити</div>`;
+    return;
+  }
+  const d = r.data;
+  title.textContent = `${d.workout_name} · ${d.date}`;
+  if (!d.exercises.length) {
+    body.innerHTML = `<div style="color:var(--muted);text-align:center;padding:20px">Сесія без записів підходів</div>`;
+    return;
+  }
+  body.innerHTML = d.exercises.map(ex => {
+    const setsStr = ex.logged_sets.map(s => {
+      if (s.actual_reps != null) return s.actual_reps;
+      if (s.actual_seconds != null) return s.actual_seconds + 'с';
+      return '—';
+    }).join(' / ');
+    return `
+      <div class="hero-card" style="margin-bottom:10px;padding:12px 14px">
+        <div style="font-size:14px;font-weight:600;margin-bottom:4px">${_esc(ex.exercise_name)}</div>
+        <div style="font-size:13px;color:var(--muted)">${setsStr}</div>
+      </div>`;
+  }).join('');
+}
+
+
+function closeCalisthenicsSessionDetail() {
+  const o = document.getElementById('cali-session-detail-overlay');
+  if (o) o.remove();
 }
 
 
