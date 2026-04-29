@@ -413,11 +413,15 @@ def post_session_start():
             }}), 400
 
     session_kind = 'mini' if workout.mini_kind else 'main'
+    cycle_phase = data.get('cycle_phase') if isinstance(data.get('cycle_phase'), str) else None
+    cycle_adapted = bool(data.get('cycle_adapted')) if data.get('cycle_adapted') is not None else False
     session = WorkoutSession(
         user_id=g.user_id, workout_id=workout_id,
         module='calisthenics', status='in_progress',
         date=date.today(),
         kind=session_kind,
+        cycle_phase=cycle_phase,
+        cycle_adapted=cycle_adapted,
     )
     db.session.add(session)
     db.session.commit()

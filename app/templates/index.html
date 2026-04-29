@@ -1319,7 +1319,6 @@ function renderTrainTab() {
 function renderCycleBadge() {
   const el = document.getElementById('cycle-phase-badge');
   if (!el) return;
-  if (S.activeModule === 'calisthenics') { el.style.display = 'none'; return; }
   if (!S.cyclePhase || !S.cyclePhase.phase) { el.style.display = 'none'; return; }
   const icons = { menstrual: '🩸', follicular: '💪', ovulation: '⚠️', luteal: '🌙' };
   const icon = icons[S.cyclePhase.phase] || '';
@@ -2693,9 +2692,41 @@ async function caliStartSession(workoutId) {
     return;
   }
 
-  // Show warmup reminder first; on confirm, actually start the session
+  // Cycle phase check — if user is in a phase that warrants adaptation, show overlay
+  const cr = await api('GET', '/api/training/cycle/phase');
+  if (cr && cr.success && cr.data) {
+    S.cyclePhase = cr.data;
+    renderCycleBadge();
+    if (cr.data.show_card) {
+      renderCycleCard();
+      S.cycleDecisionCallback = (adaptParams) => {
+        _caliProceedAfterCycle(workout, workoutId, adaptParams);
+      };
+      openOverlay('overlay-cycle');
+      return;
+    }
+  }
+  _caliProceedAfterCycle(workout, workoutId, null);
+}
+
+
+function _caliProceedAfterCycle(workout, workoutId, adaptParams) {
+  // adaptParams: {cycle_phase, cycle_adapted} or null
+  if (adaptParams && adaptParams.cycle_adapted && S.cyclePhase) {
+    S.cycleAdaptation = {
+      modifier: S.cyclePhase.modifier,
+      adaptations: S.cyclePhase.adaptations || [],
+    };
+  } else {
+    S.cycleAdaptation = null;
+  }
   showWarmupReminder(workout, async () => {
-    const r = await api('POST', '/api/calisthenics/session/start', { workout_id: workoutId });
+    const startBody = { workout_id: workoutId };
+    if (adaptParams) {
+      startBody.cycle_phase = adaptParams.cycle_phase;
+      startBody.cycle_adapted = adaptParams.cycle_adapted;
+    }
+    const r = await api('POST', '/api/calisthenics/session/start', startBody);
     if (!r.success) {
       alert('Не вдалось почати: ' + (r.error?.message || ''));
       return;
@@ -2704,10 +2735,10 @@ async function caliStartSession(workoutId) {
       session_id: r.data.session_id,
       workout: workout,
       logged: {},
+      cycleModifier: (S.cycleAdaptation?.modifier) || 1.0,
     };
     renderCalisthenicsWorkout();
   });
-  return;
 }
 
 
@@ -2755,11 +2786,24 @@ function renderCalisthenicsWorkout() {
   const el = document.getElementById('train-content');
   const sess = S.calisthenicsActiveSession;
   const w = sess.workout;
+  const mod = sess.cycleModifier || 1.0;
+  const scaleReps = (rangeStr) => {
+    if (mod === 1.0 || !rangeStr) return rangeStr;
+    const m = String(rangeStr).match(/^(\d+)(?:-(\d+))?$/);
+    if (!m) return rangeStr;
+    const lo = Math.max(1, Math.round(parseInt(m[1]) * mod));
+    const hi = m[2] ? Math.max(lo, Math.round(parseInt(m[2]) * mod)) : null;
+    return hi ? `${lo}-${hi}` : `${lo}`;
+  };
+  const scaleSec = (sec) => mod === 1.0 ? sec : Math.max(5, Math.round((sec || 0) * mod));
   const exHtml = (w.exercises || []).map(ex => {
     const unit = ex.unit || (ex.sets && ex.sets[0] && ex.sets[0].target_seconds != null ? 'seconds' : 'reps');
-    const targetText = (s) => unit === 'seconds'
-      ? (s.target_seconds + 'с' + (s.is_amrap ? ' · AMRAP' : ''))
-      : (s.target_reps + (s.is_amrap ? ' · AMRAP' : ''));
+    const targetText = (s) => {
+      const adapted = unit === 'seconds' ? scaleSec(s.target_seconds) : scaleReps(s.target_reps);
+      return unit === 'seconds'
+        ? (adapted + 'с' + (s.is_amrap ? ' · AMRAP' : ''))
+        : (adapted + (s.is_amrap ? ' · AMRAP' : ''));
+    };
     const setsHtml = (ex.sets || []).map(s => {
       const logged = (sess.logged[ex.id] || {})[s.set_number];
       if (s.is_amrap) {
@@ -2776,12 +2820,15 @@ function renderCalisthenicsWorkout() {
             </div>
           </div>`;
       }
+      // For "✓ Зробила" we log the ADAPTED target if cycle modifier is applied
+      const plannedSec = unit === 'seconds' ? scaleSec(s.target_seconds) : (s.target_seconds || 0);
+      const plannedReps = unit === 'reps' ? scaleReps(s.target_reps) : (s.target_reps || '');
       return `
         <div class="cali-set-row">
           <div class="cali-set-label">Set ${s.set_number}</div>
           <div style="font-size:11px;color:var(--muted);width:80px">${targetText(s)}</div>
           <div class="cali-set-actions">
-            <button class="cali-set-btn ${logged != null ? 'done' : ''}" onclick="caliLogPlannedSet(${ex.id},${s.set_number},${s.target_seconds || 0},'${(s.target_reps || '').replace(/'/g,"\\'")}',${unit === 'seconds' ? 1 : 0})">${logged != null ? '✓ Зроблено' : '✓ Зробила'}</button>
+            <button class="cali-set-btn ${logged != null ? 'done' : ''}" onclick="caliLogPlannedSet(${ex.id},${s.set_number},${plannedSec},'${(plannedReps || '').replace(/'/g,"\\'")}',${unit === 'seconds' ? 1 : 0})">${logged != null ? '✓ Зроблено' : '✓ Зробила'}</button>
             <button class="cali-set-btn" onclick="caliManualLog(${ex.id},${s.set_number},${unit === 'seconds' ? 1 : 0})">✏ Інакше</button>
           </div>
         </div>`;
@@ -2803,8 +2850,15 @@ function renderCalisthenicsWorkout() {
       </div>`;
   }).join('');
 
+  const cycleBanner = (mod !== 1.0 && S.cyclePhase) ? `
+    <div style="background:rgba(0,85,255,.12);border:1px solid rgba(0,85,255,.35);border-radius:8px;padding:10px 12px;margin-bottom:12px;font-size:12px;line-height:1.5">
+      <div style="font-weight:700;margin-bottom:2px">Цикл: ${S.cyclePhase.phase_title || ''}</div>
+      <div style="color:var(--muted)">Цілі знижено на ${Math.round((1 - mod) * 100)}% під фазу.</div>
+    </div>` : '';
+
   el.innerHTML = `
     <div class="cali-workout">
+      ${cycleBanner}
       <div class="cali-workout-header">
         <div class="cali-workout-title">${w.name}</div>
         <div class="cali-workout-sub">${(w.exercises||[]).length} вправ${w.estimated_duration_min ? ` · ~${w.estimated_duration_min} хв` : ''}</div>
@@ -3174,6 +3228,12 @@ async function startWorkout() {
 
 async function applyAndStartWorkout() {
   closeOverlay('overlay-cycle');
+  if (S.cycleDecisionCallback) {
+    const cb = S.cycleDecisionCallback;
+    S.cycleDecisionCallback = null;
+    cb({cycle_phase: S.cyclePhase?.phase, cycle_adapted: true});
+    return;
+  }
   if (!S.cyclePhase) { await _doStartWorkout(null); return; }
   S.cycleAdaptation = {
     modifier: S.cyclePhase.modifier,
@@ -3184,6 +3244,12 @@ async function applyAndStartWorkout() {
 
 async function ignoreAndStartWorkout() {
   closeOverlay('overlay-cycle');
+  if (S.cycleDecisionCallback) {
+    const cb = S.cycleDecisionCallback;
+    S.cycleDecisionCallback = null;
+    cb({cycle_phase: S.cyclePhase?.phase, cycle_adapted: false});
+    return;
+  }
   S.cycleAdaptation = null;
   await _doStartWorkout({ cycle_phase: S.cyclePhase?.phase, cycle_adapted: false });
 }
