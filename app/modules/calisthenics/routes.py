@@ -958,3 +958,64 @@ def post_swap_exercise(we_id):
         'new_exercise_name': target.name,
         'new_level': target.progression_level,
     }})
+
+
+@bp.route('/calisthenics/mini-session/latest', methods=['GET'])
+@require_auth
+def get_latest_mini_session():
+    """Return the user's most recent mini-workout of the given type, or null.
+    Lets the frontend reuse an existing AI-generated session instead of paying
+    for a new generation every time."""
+    mini_type = request.args.get('type')
+    if mini_type not in ('stretch', 'short', 'skill'):
+        return jsonify({'success': False, 'error': {
+            'code': 'INVALID_TYPE', 'message': 'type required (stretch|short|skill)',
+        }}), 400
+    workout = (Workout.query
+               .filter_by(user_id=g.user_id, mini_kind=mini_type)
+               .order_by(Workout.id.desc())
+               .first())
+    if not workout:
+        return jsonify({'success': True, 'data': None})
+    return jsonify({'success': True, 'data': _serialize_mini_workout(workout)})
+
+
+@bp.route('/calisthenics/session/active', methods=['GET'])
+@require_auth
+def get_active_session():
+    """Returns the user's in-progress calisthenics session (if any) with workout
+    + already-logged sets so the frontend can restore the workout view exactly
+    where the user left off."""
+    from app.modules.training.models import LoggedExercise, LoggedSet
+    session = (WorkoutSession.query
+               .filter_by(user_id=g.user_id, module='calisthenics', status='in_progress')
+               .order_by(WorkoutSession.id.desc())
+               .first())
+    if not session:
+        return jsonify({'success': True, 'data': None})
+
+    workout = db.session.get(Workout, session.workout_id) if session.workout_id else None
+    if not workout:
+        return jsonify({'success': True, 'data': None})
+
+    # Build logged: {workout_exercise_id: {set_number: actual_value}}
+    logged = {}
+    we_id_by_ex_id = {we.exercise_id: we.id for we in workout.workout_exercises}
+    logged_exs = LoggedExercise.query.filter_by(session_id=session.id).all()
+    for le in logged_exs:
+        we_id = we_id_by_ex_id.get(le.exercise_id)
+        if not we_id:
+            continue
+        for ls in LoggedSet.query.filter_by(logged_exercise_id=le.id).all():
+            value = ls.actual_reps if ls.actual_reps is not None else ls.actual_seconds
+            if value is None:
+                continue
+            logged.setdefault(we_id, {})[ls.set_number] = value
+
+    return jsonify({'success': True, 'data': {
+        'session_id': session.id,
+        'workout': _serialize_mini_workout(workout) if workout.mini_kind else _serialize_workout_with_exercises(workout),
+        'logged': logged,
+        'cycle_phase': session.cycle_phase,
+        'cycle_adapted': session.cycle_adapted,
+    }})

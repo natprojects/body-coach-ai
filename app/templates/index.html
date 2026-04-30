@@ -2042,6 +2042,21 @@ async function loadCalisthenicsMode() {
   if (S.calisthenicsProgram) {
     await caliReloadProgramData();
   }
+
+  // Check for an in-progress session — restore workout view if found
+  const activeR = await api('GET', '/api/calisthenics/session/active');
+  if (activeR && activeR.success && activeR.data) {
+    const a = activeR.data;
+    S.calisthenicsActiveSession = {
+      session_id: a.session_id,
+      workout: a.workout,
+      logged: a.logged || {},
+      cycleModifier: 1.0,  // re-applying adaptation post-restore is non-trivial; show raw targets
+    };
+    if (a.workout) S.calisthenicsActiveSession.workout.id = a.workout.workout_id || a.workout.id;
+    renderCalisthenicsWorkout();
+    return;
+  }
   renderCalisthenicsHome();
 }
 
@@ -2438,17 +2453,38 @@ function closeMiniSessionPicker() {
 }
 
 
-async function generateMiniSession(type) {
+async function caliRegenerateMini(type) {
+  if (!confirm('Згенерувати нову сесію цього типу? AI зробить нові вправи.')) return;
+  await generateMiniSession(type, true);
+}
+
+
+async function generateMiniSession(type, forceNew) {
   closeMiniSessionPicker();
   const el = document.getElementById('train-content');
-  el.innerHTML = `
-    <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:60vh">
-      <div style="width:48px;height:48px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:caliSpin 1s linear infinite;margin-bottom:20px"></div>
-      <div style="font-family:'Barlow Condensed',sans-serif;font-size:18px;text-transform:uppercase;letter-spacing:.05em">Створюю сесію…</div>
-      <div style="font-size:13px;color:var(--muted);margin-top:8px">5-15 секунд</div>
-    </div>`;
 
-  const r = await api('POST', '/api/calisthenics/mini-session/generate', {type}, 600000);
+  // Try cached first to avoid burning AI tokens — unless user asked for new
+  let r = null;
+  if (!forceNew) {
+    el.innerHTML = `
+      <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:30vh">
+        <div style="font-size:13px;color:var(--muted)">Завантажую сесію…</div>
+      </div>`;
+    const cached = await api('GET', `/api/calisthenics/mini-session/latest?type=${type}`);
+    if (cached && cached.success && cached.data) {
+      r = cached;
+    }
+  }
+
+  if (!r) {
+    el.innerHTML = `
+      <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:60vh">
+        <div style="width:48px;height:48px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:caliSpin 1s linear infinite;margin-bottom:20px"></div>
+        <div style="font-family:'Barlow Condensed',sans-serif;font-size:18px;text-transform:uppercase;letter-spacing:.05em">Створюю сесію…</div>
+        <div style="font-size:13px;color:var(--muted);margin-top:8px">5-15 секунд</div>
+      </div>`;
+    r = await api('POST', '/api/calisthenics/mini-session/generate', {type}, 600000);
+  }
   if (!r || !r.success) {
     alert('Не вдалось створити: ' + (r?.error?.message || ''));
     renderCalisthenicsHome();
@@ -2797,13 +2833,21 @@ function renderCalisthenicsWorkout() {
   };
   const scaleSec = (sec) => mod === 1.0 ? sec : Math.max(5, Math.round((sec || 0) * mod));
   const exHtml = (w.exercises || []).map(ex => {
-    const unit = ex.unit || (ex.sets && ex.sets[0] && ex.sets[0].target_seconds != null ? 'seconds' : 'reps');
+    // Unit per-set: trust the actual data shape (target_seconds vs target_reps)
+    // AI sometimes flips unit; fall back to ex.unit if both are null.
+    const unitOf = (s) => (s.target_seconds != null) ? 'seconds'
+                       : (s.target_reps != null) ? 'reps'
+                       : (ex.unit || 'reps');
     const targetText = (s) => {
-      const adapted = unit === 'seconds' ? scaleSec(s.target_seconds) : scaleReps(s.target_reps);
-      return unit === 'seconds'
+      const u = unitOf(s);
+      const adapted = u === 'seconds' ? scaleSec(s.target_seconds) : scaleReps(s.target_reps);
+      if (adapted == null) return s.is_amrap ? 'AMRAP' : '—';
+      return u === 'seconds'
         ? (adapted + 'с' + (s.is_amrap ? ' · AMRAP' : ''))
         : (adapted + (s.is_amrap ? ' · AMRAP' : ''));
     };
+    // Use first set's unit for buttons (assumes consistent unit per exercise)
+    const unit = (ex.sets && ex.sets[0]) ? unitOf(ex.sets[0]) : (ex.unit || 'reps');
     const setsHtml = (ex.sets || []).map(s => {
       const logged = (sess.logged[ex.id] || {})[s.set_number];
       if (s.is_amrap) {
@@ -2856,12 +2900,19 @@ function renderCalisthenicsWorkout() {
       <div style="color:var(--muted)">Цілі знижено на ${Math.round((1 - mod) * 100)}% під фазу.</div>
     </div>` : '';
 
+  const miniRegenBtn = (w.mini_kind) ? `
+    <button class="btn btn-ghost" style="width:auto;font-size:11px;padding:5px 10px"
+            onclick="caliRegenerateMini('${w.mini_kind}')">↻ Нову сесію</button>` : '';
+
   el.innerHTML = `
     <div class="cali-workout">
       ${cycleBanner}
-      <div class="cali-workout-header">
-        <div class="cali-workout-title">${w.name}</div>
-        <div class="cali-workout-sub">${(w.exercises||[]).length} вправ${w.estimated_duration_min ? ` · ~${w.estimated_duration_min} хв` : ''}</div>
+      <div class="cali-workout-header" style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
+        <div>
+          <div class="cali-workout-title">${w.name}</div>
+          <div class="cali-workout-sub">${(w.exercises||[]).length} вправ${w.estimated_duration_min ? ` · ~${w.estimated_duration_min} хв` : ''}</div>
+        </div>
+        ${miniRegenBtn}
       </div>
       ${exHtml}
       <button class="cali-complete-btn" onclick="caliCompleteSession()">Завершити тренування</button>

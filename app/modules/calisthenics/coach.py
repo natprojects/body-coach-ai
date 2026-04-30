@@ -296,6 +296,19 @@ def generate_mini_session(user, profile: CalisthenicsProfile,
     config = _MINI_PROMPTS[mini_type]
     catalog = _calisthenics_exercise_catalog()
 
+    equipment = profile.equipment or []
+    pull_gear = {'pullup_bar', 'dip_bars', 'rings'}
+    has_pull_gear = any(e in pull_gear for e in equipment)
+    eq_block = f"USER EQUIPMENT: {equipment}\n"
+    if not has_pull_gear:
+        eq_block += (
+            "STRICT: USER HAS NO PULL-UP BAR / DIP BARS / RINGS. "
+            "DO NOT include ANY exercise from the 'pull' chain (no pullups, dead hang, "
+            "scapular pull, etc.). DO NOT include 'hanging knee raise', 'hanging leg raise', "
+            "'toes-to-bar' from core_dynamic — these need a bar. "
+            "Allowed chains: push, squat, lunge, core_static, core_dynamic level 0 (dead bug)."
+        )
+
     system_prompt = f"""You are an expert calisthenics coach.
 Generate a calisthenics MINI-SESSION as compact JSON only — no prose, no markdown, just valid JSON.
 
@@ -303,6 +316,8 @@ Generate a calisthenics MINI-SESSION as compact JSON only — no prose, no markd
 
 CLOSED EXERCISE LIST (use ONLY these names, exactly as written):
 {json.dumps(catalog, ensure_ascii=False)}
+
+{eq_block}
 
 INJURIES from profile: {profile.injuries or []}
 GOALS: {profile.goals or []}
