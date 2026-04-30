@@ -2047,11 +2047,24 @@ async function loadCalisthenicsMode() {
   const activeR = await api('GET', '/api/calisthenics/session/active');
   if (activeR && activeR.success && activeR.data) {
     const a = activeR.data;
+    let modifier = 1.0;
+    // If session was started with cycle adaptation, re-fetch current modifier
+    if (a.cycle_adapted) {
+      const cr = await api('GET', '/api/training/cycle/phase');
+      if (cr && cr.success && cr.data && cr.data.modifier) {
+        S.cyclePhase = cr.data;
+        modifier = cr.data.modifier;
+        S.cycleAdaptation = {
+          modifier: cr.data.modifier,
+          adaptations: cr.data.adaptations || [],
+        };
+      }
+    }
     S.calisthenicsActiveSession = {
       session_id: a.session_id,
       workout: a.workout,
       logged: a.logged || {},
-      cycleModifier: 1.0,  // re-applying adaptation post-restore is non-trivial; show raw targets
+      cycleModifier: modifier,
     };
     if (a.workout) S.calisthenicsActiveSession.workout.id = a.workout.workout_id || a.workout.id;
     renderCalisthenicsWorkout();
