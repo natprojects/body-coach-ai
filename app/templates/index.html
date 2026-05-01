@@ -2919,6 +2919,10 @@ function renderCalisthenicsWorkout() {
 
   el.innerHTML = `
     <div class="cali-workout">
+      <div style="display:flex;align-items:center;margin-bottom:12px">
+        <button class="btn btn-ghost" style="width:auto;padding:6px 14px"
+                onclick="caliExitWorkout()">← Вийти</button>
+      </div>
       ${cycleBanner}
       <div class="cali-workout-header" style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
         <div>
@@ -2930,6 +2934,14 @@ function renderCalisthenicsWorkout() {
       ${exHtml}
       <button class="cali-complete-btn" onclick="caliCompleteSession()">Завершити тренування</button>
     </div>`;
+}
+
+
+function caliExitWorkout() {
+  // Leave session in_progress in DB. User can resume from home next time.
+  if (!confirm('Вийти з тренування? Прогрес зберігається — можеш повернутись пізніше.')) return;
+  S.calisthenicsActiveSession = null;
+  renderCalisthenicsHome();
 }
 
 
