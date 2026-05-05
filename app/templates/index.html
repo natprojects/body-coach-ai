@@ -2344,15 +2344,37 @@ function renderCalisthenicsHome() {
     </div>` : '';
 
   let endOfBlockBanner = '';
-  if (program && weekOverview && weekOverview.workouts && weekOverview.workouts.length > 0) {
-    const target = (program.total_weeks || 4) * weekOverview.workouts.length;
+  if (program) {
+    // Time-based check: weeks elapsed since program created_at
+    let weeksElapsed = 0;
+    if (program.created_at) {
+      const startMs = new Date(program.created_at).getTime();
+      weeksElapsed = Math.floor((Date.now() - startMs) / (7 * 24 * 60 * 60 * 1000));
+    }
+    const totalWeeks = program.total_weeks || 4;
+
+    // Completion-based check (existing)
+    const target = (weekOverview?.workouts?.length || 0) * totalWeeks;
     const done = S.calisthenicsCompletedCount || 0;
-    if (done >= target) {
+    const allDone = target > 0 && done >= target;
+
+    if (allDone) {
+      // Highest priority — user finished all sessions
       endOfBlockBanner = `
         <div class="no-program-card" style="background:rgba(245,158,11,.12);border-color:rgba(245,158,11,.4)">
           <div class="np-title">🏆 Блок завершено!</div>
-          <div class="np-body">Час оновити програму під свіжі результати</div>
-          <button class="btn btn-primary" onclick="openScheduleEditor()">Перегенерувати</button>
+          <div class="np-body">Зробила всі ${target} тренувань цього блоку. Час оновити програму під свіжі результати.</div>
+          <button class="btn btn-primary" onclick="renderCalisthenicsAssessment()">Пройти оцінку</button>
+          <button class="btn btn-ghost" style="margin-top:6px" onclick="openScheduleEditor()">Або просто перегенерувати</button>
+        </div>`;
+    } else if (weeksElapsed >= totalWeeks) {
+      // Time-based reminder — e.g. 4+ weeks passed even if she didn't finish all sessions
+      endOfBlockBanner = `
+        <div class="no-program-card" style="background:rgba(0,200,150,.10);border-color:rgba(0,200,150,.35)">
+          <div class="np-title">🌱 Минуло ${weeksElapsed} тижнів</div>
+          <div class="np-body">За методиками (Steven Low, Schoenfeld 2017) блоки калістеніки оптимально оновлювати кожні 4-6 тижнів. Пройди оцінку — побачиш реальний прогрес і AI підбере наступний рівень.</div>
+          <button class="btn btn-primary" onclick="renderCalisthenicsAssessment()">Пройти оцінку</button>
+          <button class="btn btn-ghost" style="margin-top:6px" onclick="openScheduleEditor()">Перегенерувати без оцінки</button>
         </div>`;
     }
   }
