@@ -964,20 +964,41 @@ def post_swap_exercise(we_id):
 @require_auth
 def get_latest_mini_session():
     """Return the user's most recent mini-workout of the given type, or null.
-    Lets the frontend reuse an existing AI-generated session instead of paying
-    for a new generation every time."""
+    Skips cached workouts that have exercises incompatible with current equipment
+    (e.g. pull/hanging exercises when user has no bar) — forces fresh generation."""
     mini_type = request.args.get('type')
     if mini_type not in ('stretch', 'short', 'skill'):
         return jsonify({'success': False, 'error': {
             'code': 'INVALID_TYPE', 'message': 'type required (stretch|short|skill)',
         }}), 400
-    workout = (Workout.query
-               .filter_by(user_id=g.user_id, mini_kind=mini_type)
-               .order_by(Workout.id.desc())
-               .first())
-    if not workout:
-        return jsonify({'success': True, 'data': None})
-    return jsonify({'success': True, 'data': _serialize_mini_workout(workout)})
+
+    profile = CalisthenicsProfile.query.filter_by(user_id=g.user_id).first()
+    equipment = (profile.equipment or []) if profile else []
+    pull_gear = {'pullup_bar', 'dip_bars', 'rings'}
+    has_pull_gear = any(e in pull_gear for e in equipment)
+
+    recent = (Workout.query
+              .filter_by(user_id=g.user_id, mini_kind=mini_type)
+              .order_by(Workout.id.desc())
+              .limit(10)
+              .all())
+    for workout in recent:
+        if not has_pull_gear:
+            incompatible = False
+            for we in workout.workout_exercises:
+                ex = db.session.get(Exercise, we.exercise_id)
+                if not ex:
+                    continue
+                if ex.progression_chain == 'pull':
+                    incompatible = True
+                    break
+                if ex.progression_chain == 'core_dynamic' and (ex.progression_level or 0) >= 1:
+                    incompatible = True
+                    break
+            if incompatible:
+                continue
+        return jsonify({'success': True, 'data': _serialize_mini_workout(workout)})
+    return jsonify({'success': True, 'data': None})
 
 
 @bp.route('/calisthenics/session/active', methods=['GET'])

@@ -1335,18 +1335,30 @@ function renderCycleCard() {
   const warningsHtml = p.warnings?.length
     ? `<div style="color:#ff9800;font-size:12px;margin-top:8px">${p.warnings.map(w => `⚠️ ${_esc(w)}`).join('<br>')}</div>`
     : '';
-  const adaptationsHtml = p.adaptations?.length
-    ? `<div style="margin-top:12px">
-        <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--muted);margin-bottom:6px">Адаптації</div>
-        ${p.adaptations.map(a => `
-          <div style="margin-bottom:6px">
-            <span style="font-size:13px">${_esc(a.exercise_name)}</span>
-            <span style="color:var(--muted);font-size:12px"> ${_esc(String(a.original_weight))}kg → </span>
-            <span style="color:#4caf50;font-weight:700;font-size:13px">${_esc(String(a.adapted_weight))}kg</span>
-            ${a.ai_note ? `<div class="cycle-ai-note">💡 ${_esc(a.ai_note)}</div>` : ''}
-          </div>`).join('')}
-       </div>`
-    : '';
+  // Calisthenics has no weights — render a generic adaptation message instead of per-exercise weight diff
+  const isCalisthenics = S.activeModule === 'calisthenics';
+  const modPct = p.modifier ? Math.round((1 - p.modifier) * 100) : 0;
+  const adaptationsHtml = isCalisthenics
+    ? (modPct > 0 ? `
+        <div style="margin-top:12px">
+          <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--muted);margin-bottom:6px">Адаптація</div>
+          <div style="font-size:13px;line-height:1.5">
+            Цілі (повторення / секунди) знизяться на <span style="color:#4caf50;font-weight:700">−${modPct}%</span>.
+            Фокусуйся на техніці, не намагайся побити рекорди.
+          </div>
+        </div>` : '')
+    : (p.adaptations?.length
+        ? `<div style="margin-top:12px">
+            <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--muted);margin-bottom:6px">Адаптації</div>
+            ${p.adaptations.map(a => `
+              <div style="margin-bottom:6px">
+                <span style="font-size:13px">${_esc(a.exercise_name)}</span>
+                <span style="color:var(--muted);font-size:12px"> ${_esc(String(a.original_weight))}kg → </span>
+                <span style="color:#4caf50;font-weight:700;font-size:13px">${_esc(String(a.adapted_weight))}kg</span>
+                ${a.ai_note ? `<div class="cycle-ai-note">💡 ${_esc(a.ai_note)}</div>` : ''}
+              </div>`).join('')}
+           </div>`
+        : '');
   el.innerHTML = `
     <div style="font-size:16px;font-weight:700;margin-bottom:4px">${icon} ${_esc(p.phase_title)} • день ${_esc(String(p.cycle_day))}</div>
     <div style="font-size:13px;color:var(--muted);line-height:1.5">${_esc(p.phase_description)}</div>
