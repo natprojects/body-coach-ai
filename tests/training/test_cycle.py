@@ -113,6 +113,58 @@ def test_cycle_wraps_correctly(app, db):
     assert result['phase'] == 'menstrual'
 
 
+def test_recent_checkin_cycle_day_overrides_stale_period_date(app, db):
+    """If user logged cycle_day=1 yesterday, today should compute as day 2 even
+    when user.last_period_date is far in the past (set during onboarding and
+    never updated)."""
+    user = _make_user_with_cycle(db, last_period_date=date.today() - timedelta(days=24))
+    db.session.add(DailyCheckin(
+        user_id=user.id,
+        date=date.today() - timedelta(days=1),
+        cycle_day=1,
+    ))
+    db.session.commit()
+    from app.modules.training.cycle import get_cycle_phase
+    result = get_cycle_phase(user.id)
+    assert result['cycle_day'] == 2
+    assert result['phase'] == 'menstrual'
+
+
+def test_recent_checkin_anchor_extrapolates(app, db):
+    """If user logged cycle_day=3 four days ago, today should be day 7 (follicular)."""
+    user = _make_user_with_cycle(db, last_period_date=date.today() - timedelta(days=30))
+    db.session.add(DailyCheckin(
+        user_id=user.id,
+        date=date.today() - timedelta(days=4),
+        cycle_day=3,
+    ))
+    db.session.commit()
+    from app.modules.training.cycle import get_cycle_phase
+    result = get_cycle_phase(user.id)
+    assert result['cycle_day'] == 7
+    assert result['phase'] == 'follicular'
+
+
+def test_today_checkin_still_takes_priority(app, db):
+    """A cycle_day in TODAY's checkin still wins over older anchors."""
+    user = _make_user_with_cycle(db, last_period_date=date.today() - timedelta(days=24))
+    db.session.add(DailyCheckin(
+        user_id=user.id,
+        date=date.today() - timedelta(days=1),
+        cycle_day=1,
+    ))
+    db.session.add(DailyCheckin(
+        user_id=user.id,
+        date=date.today(),
+        cycle_day=14,
+    ))
+    db.session.commit()
+    from app.modules.training.cycle import get_cycle_phase
+    result = get_cycle_phase(user.id)
+    assert result['cycle_day'] == 14
+    assert result['phase'] == 'ovulation'
+
+
 def test_is_plyometric_detection():
     """Keywords like 'jump', 'burpee', 'стрибок' are detected as plyometric."""
     from app.modules.training.cycle import _is_plyometric

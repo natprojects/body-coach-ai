@@ -77,8 +77,21 @@ def get_cycle_phase(user_id: int) -> dict:
         cycle_day = today_checkin.cycle_day
     else:
         cycle_length = user.cycle_length_days or 28
-        days_since = (date.today() - user.last_period_date).days
-        cycle_day = (days_since % cycle_length) + 1
+        # Use the most recent past DailyCheckin.cycle_day as anchor — it's more
+        # accurate than user.last_period_date which is set once at onboarding
+        # and not auto-updated when the user logs a new period start in checkin.
+        recent = (DailyCheckin.query
+                  .filter(DailyCheckin.user_id == user_id,
+                          DailyCheckin.cycle_day.isnot(None),
+                          DailyCheckin.date < date.today())
+                  .order_by(DailyCheckin.date.desc())
+                  .first())
+        if recent:
+            days_since = (date.today() - recent.date).days
+            cycle_day = ((recent.cycle_day - 1 + days_since) % cycle_length) + 1
+        else:
+            days_since = (date.today() - user.last_period_date).days
+            cycle_day = (days_since % cycle_length) + 1
 
     phase = _phase_for_day(cycle_day)
     info = dict(PHASE_DATA[phase])

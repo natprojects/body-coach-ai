@@ -92,6 +92,24 @@ def test_week_overview_no_program(app, client, db):
     assert data['workouts'] == []
 
 
+def test_week_overview_calisthenics_after_program_total_weeks(app, client, db):
+    """Calisthenics programs use a single repeating week template — workouts
+    must keep showing up even after `total_weeks` of calendar time has elapsed
+    since the program was created."""
+    from datetime import datetime, timedelta
+    user = _make_user(db, telegram_id=70013, active_module='calisthenics')
+    program = _make_program(db, user, module='calisthenics')
+    # Backdate program to simulate it being older than total_weeks
+    program.created_at = datetime.utcnow() - timedelta(weeks=10)
+    db.session.commit()
+
+    r = client.get('/api/training/week-overview', headers=_h(app, user.id))
+    assert r.status_code == 200
+    workouts = r.get_json()['data']['workouts']
+    assert len(workouts) == 1
+    assert workouts[0]['name'] == 'calisthenics Day 1'
+
+
 def test_week_overview_requires_auth(app, client, db):
     r = client.get('/api/training/week-overview')
     assert r.status_code == 401

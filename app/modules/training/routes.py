@@ -531,13 +531,22 @@ def get_week_overview():
             'workouts': [],
         }})
 
-    days_elapsed = (today - program.created_at.date()).days
-    current_week_num = (days_elapsed // 7) + 1
-
-    week = (ProgramWeek.query
-            .join(Mesocycle)
-            .filter(Mesocycle.program_id == program.id, ProgramWeek.week_number == current_week_num)
-            .first())
+    if user.active_module == 'calisthenics':
+        # Calisthenics programs use a single repeating week template — always
+        # use the first (and only) ProgramWeek regardless of how much time has
+        # elapsed since the program was created.
+        week = (ProgramWeek.query.join(Mesocycle)
+                .filter(Mesocycle.program_id == program.id)
+                .order_by(ProgramWeek.week_number)
+                .first())
+    else:
+        days_elapsed = (today - program.created_at.date()).days
+        current_week_num = (days_elapsed // 7) + 1
+        week = (ProgramWeek.query
+                .join(Mesocycle)
+                .filter(Mesocycle.program_id == program.id,
+                        ProgramWeek.week_number == current_week_num)
+                .first())
     if not week:
         return jsonify({'success': True, 'data': {
             'week_start': week_start.isoformat(),

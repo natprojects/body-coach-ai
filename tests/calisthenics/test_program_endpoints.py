@@ -482,3 +482,43 @@ def test_regenerate_works_without_params(mock_gen, app, client, db):
     assert r2.status_code == 200
     profile_after = CalisthenicsProfile.query.filter_by(user_id=user.id).first()
     assert profile_after.days_per_week == days_before
+
+
+# ── /session/active ────────────────────────────────────────────────────────────
+
+def test_session_active_returns_today_session(app, client, db):
+    user = _make_user(db, telegram_id=95001)
+    today_dow = date.today().weekday()
+    _, [wo] = _make_program(db, user, days_indices=(today_dow,))
+    s = WorkoutSession(user_id=user.id, workout_id=wo.id,
+                       module='calisthenics', status='in_progress',
+                       date=date.today())
+    db.session.add(s); db.session.commit()
+    r = client.get('/api/calisthenics/session/active', headers=_h(app, user.id))
+    assert r.status_code == 200
+    data = r.get_json()['data']
+    assert data is not None
+    assert data['session_id'] == s.id
+
+
+def test_session_active_ignores_yesterdays_session(app, client, db):
+    """An in-progress session left over from yesterday must not auto-restore —
+    otherwise an abandoned mini-session keeps re-opening every time the user
+    opens the Train tab."""
+    user = _make_user(db, telegram_id=95002)
+    today_dow = date.today().weekday()
+    _, [wo] = _make_program(db, user, days_indices=(today_dow,))
+    s = WorkoutSession(user_id=user.id, workout_id=wo.id,
+                       module='calisthenics', status='in_progress',
+                       date=date.today() - timedelta(days=1))
+    db.session.add(s); db.session.commit()
+    r = client.get('/api/calisthenics/session/active', headers=_h(app, user.id))
+    assert r.status_code == 200
+    assert r.get_json()['data'] is None
+
+
+def test_session_active_no_session(app, client, db):
+    user = _make_user(db, telegram_id=95003)
+    r = client.get('/api/calisthenics/session/active', headers=_h(app, user.id))
+    assert r.status_code == 200
+    assert r.get_json()['data'] is None

@@ -1006,10 +1006,16 @@ def get_latest_mini_session():
 def get_active_session():
     """Returns the user's in-progress calisthenics session (if any) with workout
     + already-logged sets so the frontend can restore the workout view exactly
-    where the user left off."""
+    where the user left off.
+
+    Only TODAY's in-progress sessions are restored. Sessions left over from
+    previous days are ignored — otherwise an abandoned mini-session from
+    yesterday would auto-open every time the user opens the Train tab.
+    """
     from app.modules.training.models import LoggedExercise, LoggedSet
     session = (WorkoutSession.query
-               .filter_by(user_id=g.user_id, module='calisthenics', status='in_progress')
+               .filter_by(user_id=g.user_id, module='calisthenics',
+                          status='in_progress', date=date.today())
                .order_by(WorkoutSession.id.desc())
                .first())
     if not session:
